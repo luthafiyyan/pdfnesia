@@ -1,0 +1,107 @@
+/* Base Transition */
+body, div, nav, button, input, select, textarea {
+    transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+}
+
+/* Tool Card Animation */
+.tool-card {
+    transition: all 0.3s ease;
+    border: 1px solid transparent;
+}
+.tool-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 20px 40px -5px rgba(67, 97, 238, 0.15);
+    border-color: #4361ee20;
+}
+
+/* Loader */
+.loader {
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #4361ee;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    animation: spin 1s linear infinite;
+}
+.dark .loader {
+    border-color: #334155; /* Slate-700 */
+    border-top-color: #4361ee;
+}
+.loader-lg {
+    width: 40px;
+    height: 40px;
+    border-width: 4px;
+}
+@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+/* Scrollbar Hide */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Image Preview */
+.preview-img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    transition: transform 0.3s ease;
+}
+
+/* Page Thumbnails */
+.page-thumb-card {
+    position: relative;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 2px solid transparent;
+}
+.page-thumb-card:hover {
+    transform: scale(1.02);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+.page-thumb-card.to-delete {
+    opacity: 0.6;
+    border-color: #ef4444;
+    background-color: #fef2f2;
+}
+.page-thumb-card.to-delete::after {
+    content: "\f2ed";
+    font-family: "Font Awesome 6 Free";
+    font-weight: 900;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 2rem;
+    color: #ef4444;
+    background: rgba(255,255,255,0.9);
+    padding: 12px;
+    border-radius: 50%;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+/* Drag & Drop */
+.draggable-card { cursor: grab; }
+.draggable-card.dragging {
+    opacity: 0.5;
+    border: 2px dashed #4361ee;
+}
+.draggable-card:active { cursor: grabbing; }
+
+.draggable-page { cursor: grab; transition: transform 0.2s ease; }
+.draggable-page.dragging {
+    opacity: 0.4;
+    border: 2px dashed #4361ee;
+    transform: scale(0.95);
+}
+.draggable-page:active { cursor: grabbing; }
+
+/* Page Badge */
+.page-badge {
+    position: absolute;
+    bottom: 8px;
+    right: 8px;
+    background: rgba(0,0,0,0.6);
+    color: white;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
