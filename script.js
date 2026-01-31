@@ -687,28 +687,28 @@ const app = {
                             <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-4">Mode Kompresi</label>
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <label class="cursor-pointer border border-gray-200 dark:border-slate-700 rounded-xl p-4 hover:border-primary/30 hover:bg-surface dark:hover:bg-slate-800 has-[:checked]:border-primary has-[:checked]:bg-primary/5 dark:has-[:checked]:bg-primary/20 transition bg-white dark:bg-slate-950 shadow-sm">
-                                    <input type="radio" name="compressMode" value="basic" checked class="hidden" onchange="app.toggleCompressOptions()">
-                                    <div class="font-bold text-sm text-gray-800 dark:text-gray-200 mb-1">Standar</div>
-                                    <div class="text-xs text-gray-500 dark:text-gray-400">Hapus metadata, pertahankan teks (Cepat).</div>
+                                    <input type="radio" name="compressMode" value="manual" checked class="hidden" onchange="app.toggleCompressOptions()">
+                                    <div class="font-bold text-sm text-gray-800 dark:text-gray-200 mb-1">Manual (Kualitas & PPI)</div>
+                                    <div class="text-xs text-gray-500 dark:text-gray-400">Atur sendiri kualitas dan resolusi.</div>
                                 </label>
                                 <label class="cursor-pointer border border-gray-200 dark:border-slate-700 rounded-xl p-4 hover:border-primary/30 hover:bg-surface dark:hover:bg-slate-800 has-[:checked]:border-primary has-[:checked]:bg-primary/5 dark:has-[:checked]:bg-primary/20 transition bg-white dark:bg-slate-950 shadow-sm">
-                                    <input type="radio" name="compressMode" value="extreme" class="hidden" onchange="app.toggleCompressOptions()">
-                                    <div class="font-bold text-sm text-gray-800 dark:text-gray-200 mb-1">Ekstrem</div>
-                                    <div class="text-xs text-gray-500 dark:text-gray-400">Ubah jadi gambar, atur kualitas (Lambat).</div>
+                                    <input type="radio" name="compressMode" value="auto" class="hidden" onchange="app.toggleCompressOptions()">
+                                    <div class="font-bold text-sm text-gray-800 dark:text-gray-200 mb-1">Otomatis (Target KB)</div>
+                                    <div class="text-xs text-gray-500 dark:text-gray-400">Masukkan target ukuran file.</div>
                                 </label>
                             </div>
                         </div>
 
-                        <div id="compress-options" class="hidden space-y-6 border-t border-gray-100 dark:border-slate-800 pt-6 animate-fade-in">
+                        <div id="compress-manual" class="space-y-6 border-t border-gray-100 dark:border-slate-800 pt-6 animate-fade-in">
                             <div>
-                                <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-3">Kualitas Gambar (Estimasi Ukuran)</label>
+                                <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-3">Kualitas Gambar (%)</label>
                                 <div class="flex items-center gap-4">
-                                    <input type="range" id="comp-quality" min="0.1" max="1.0" step="0.1" value="0.7" class="w-full accent-primary h-2 bg-gray-100 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer" oninput="document.getElementById('qual-val').innerText = Math.round(this.value * 100) + '%'">
-                                    <span id="qual-val" class="font-bold text-primary w-12 text-right bg-primary/10 rounded px-2 py-1 text-xs">70%</span>
+                                    <input type="range" id="comp-quality" min="10" max="100" step="5" value="70" class="w-full accent-primary h-2 bg-gray-100 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer" oninput="document.getElementById('qual-val').innerText = this.value + '%'">
+                                    <span id="qual-val" class="font-bold text-primary w-14 text-right bg-primary/10 rounded px-2 py-1 text-xs">70%</span>
                                 </div>
                                 <div class="flex justify-between text-[10px] text-gray-400 dark:text-gray-500 mt-2 font-medium uppercase tracking-wide">
-                                    <span>Ukuran Kecil</span>
-                                    <span>Kualitas Tinggi</span>
+                                    <span>Rendah (Ukuran Kecil)</span>
+                                    <span>Tinggi (Ukuran Besar)</span>
                                 </div>
                             </div>
 
@@ -719,20 +719,46 @@ const app = {
                                         <option value="72">72 PPI (Layar / Web - Kecil)</option>
                                         <option value="96">96 PPI (Standard)</option>
                                         <option value="144" selected>144 PPI (Ebook / Jelas)</option>
+                                        <option value="200">200 PPI (Cetak - Sedang)</option>
                                         <option value="300">300 PPI (Cetak - Besar)</option>
                                     </select>
                                     <i class="fa-solid fa-chevron-down absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 text-xs pointer-events-none"></i>
                                 </div>
                             </div>
-                            
-                            <div class="bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300 p-4 rounded-xl text-xs border border-amber-100 dark:border-amber-800/30 flex items-start">
-                                <i class="fa-solid fa-triangle-exclamation mr-3 text-sm mt-0.5"></i> 
-                                <span><b>Perhatian:</b> Mode Ekstrem akan mengubah halaman menjadi gambar (rasterize). Teks dalam PDF tidak akan bisa diblok/copy lagi.</span>
+                        </div>
+
+                        <div id="compress-auto" class="hidden space-y-6 border-t border-gray-100 dark:border-slate-800 pt-6 animate-fade-in">
+                             <div>
+                                <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-3">Target Ukuran File (KB)</label>
+                                <div class="relative">
+                                    <input type="number" id="target-kb" placeholder="Contoh: 200" class="w-full p-3 border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none transition text-gray-700 dark:text-gray-200 bg-surface dark:bg-slate-950">
+                                    <span class="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 text-sm font-bold">KB</span>
+                                </div>
+                                <p class="text-xs text-gray-400 dark:text-gray-500 mt-2">Sistem akan mencoba mengompres gambar agar mendekati ukuran ini. Hasil mungkin bervariasi tergantung kompleksitas dokumen.</p>
                             </div>
+                        </div>
+                        
+                        <div class="bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300 p-4 rounded-xl text-xs border border-amber-100 dark:border-amber-800/30 flex items-start">
+                            <i class="fa-solid fa-triangle-exclamation mr-3 text-sm mt-0.5"></i> 
+                            <span><b>Perhatian:</b> Kompresi ini akan mengubah halaman PDF menjadi gambar (rasterize). Teks dalam PDF tidak akan bisa diblok/copy lagi.</span>
                         </div>
                     </div>
                 `;
                 break;
+        }
+    },
+    
+    toggleCompressOptions: () => {
+        const mode = document.querySelector('input[name="compressMode"]:checked').value;
+        const manualOpts = document.getElementById('compress-manual');
+        const autoOpts = document.getElementById('compress-auto');
+        
+        if (mode === 'manual') {
+            manualOpts.classList.remove('hidden');
+            autoOpts.classList.add('hidden');
+        } else {
+            manualOpts.classList.add('hidden');
+            autoOpts.classList.remove('hidden');
         }
     },
     
@@ -902,34 +928,61 @@ const app = {
 
             } else if (toolId === 'compress') {
                 const mode = document.querySelector('input[name="compressMode"]:checked').value;
-                if (mode === 'basic') {
-                    resultBytes = await pdfDoc.save();
+                
+                let quality, ppi;
+                
+                if (mode === 'auto') {
+                    // Logic to estimate quality based on Target KB
+                    // This is a naive implementation for client-side
+                    const targetKB = parseInt(document.getElementById('target-kb').value) || 500;
+                    const totalPages = app.files[0] ? (await PDFDocument.load(app.files[0].buffer)).getPageCount() : 1;
+                    
+                    // Rough estimation: Target Size per Page
+                    // Assuming A4 full color image page
+                    // Adjust quality and PPI to attempt fitting
+                    
+                    const kbPerPage = targetKB / totalPages;
+                    
+                    if (kbPerPage > 200) { quality = 0.8; ppi = 144; }
+                    else if (kbPerPage > 100) { quality = 0.6; ppi = 96; }
+                    else if (kbPerPage > 50) { quality = 0.5; ppi = 72; }
+                    else { quality = 0.3; ppi = 72; }
+                    
                 } else {
-                    const quality = parseFloat(document.getElementById('comp-quality').value);
-                    const ppi = parseInt(document.getElementById('comp-ppi').value);
-                    const scale = ppi / 72; 
-                    const newPdf = await PDFDocument.create();
-                    for (let file of app.files) {
-                        const bufferCopy = file.buffer.slice(0);
-                        const loadingTask = pdfjsLib.getDocument(new Uint8Array(bufferCopy));
-                        const pdf = await loadingTask.promise;
-                        for (let i = 1; i <= pdf.numPages; i++) {
-                            const page = await pdf.getPage(i);
-                            const viewport = page.getViewport({ scale: scale });
-                            const canvas = document.createElement('canvas');
-                            const context = canvas.getContext('2d');
-                            canvas.height = viewport.height;
-                            canvas.width = viewport.width;
-                            await page.render({ canvasContext: context, viewport: viewport }).promise;
-                            const imgDataUrl = canvas.toDataURL('image/jpeg', quality);
-                            const img = await newPdf.embedJpg(imgDataUrl);
-                            const pageDims = [viewport.width / scale, viewport.height / scale];
-                            const newPage = newPdf.addPage(pageDims);
-                            newPage.drawImage(img, { x: 0, y: 0, width: pageDims[0], height: pageDims[1] });
-                        }
-                    }
-                    resultBytes = await newPdf.save();
+                    quality = parseInt(document.getElementById('comp-quality').value) / 100;
+                    ppi = parseInt(document.getElementById('comp-ppi').value);
                 }
+                
+                const scale = ppi / 72; 
+                const newPdf = await PDFDocument.create();
+                
+                // Process all files
+                for (let file of app.files) {
+                    const bufferCopy = file.buffer.slice(0);
+                    const loadingTask = pdfjsLib.getDocument(new Uint8Array(bufferCopy));
+                    const pdf = await loadingTask.promise;
+                    
+                    for (let i = 1; i <= pdf.numPages; i++) {
+                        const page = await pdf.getPage(i);
+                        const viewport = page.getViewport({ scale: scale });
+                        
+                        const canvas = document.createElement('canvas');
+                        const context = canvas.getContext('2d');
+                        canvas.height = viewport.height;
+                        canvas.width = viewport.width;
+                        
+                        await page.render({ canvasContext: context, viewport: viewport }).promise;
+                        
+                        const imgDataUrl = canvas.toDataURL('image/jpeg', quality);
+                        const img = await newPdf.embedJpg(imgDataUrl);
+                        
+                        // Dimensions in points (1/72 inch)
+                        const pageDims = [viewport.width / scale, viewport.height / scale];
+                        const newPage = newPdf.addPage(pageDims);
+                        newPage.drawImage(img, { x: 0, y: 0, width: pageDims[0], height: pageDims[1] });
+                    }
+                }
+                resultBytes = await newPdf.save();
             }
 
             app.processedPdfBytes = resultBytes;
