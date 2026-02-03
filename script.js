@@ -38,7 +38,7 @@ const app = {
     tools: [
         { id: 'merge', title: 'Gabung PDF', icon: 'fa-layer-group', desc: 'Satukan banyak file PDF menjadi satu urutan.', accept: '.pdf' },
         { id: 'reorder', title: 'Urutkan PDF', icon: 'fa-sort', desc: 'Atur ulang urutan halaman PDF dengan drag & drop.', accept: '.pdf' },
-        { id: 'split', title: 'Pisah PDF', icon: 'fa-scissors', desc: 'Ambil halaman tertentu atau pisahkan per halaman.', accept: '.pdf' },
+        { id: 'split', title: 'Pisah PDF', icon: 'fa-scissors', desc: 'Pilih halaman yang ingin dibuang/dipisahkan dari dokumen.', accept: '.pdf' },
         { id: 'compress', title: 'Kompres PDF', icon: 'fa-compress', desc: 'Atur kualitas (KB/PPI) untuk memperkecil ukuran.', accept: '.pdf' },
         { id: 'rotate', title: 'Putar PDF', icon: 'fa-rotate-right', desc: 'Putar halaman PDF 90°, 180°, atau 270°.', accept: '.pdf' },
         { id: 'img-to-pdf', title: 'JPG ke PDF', icon: 'fa-image', desc: 'Ubah gambar JPG/PNG menjadi file PDF.', accept: 'image/*' },
@@ -230,7 +230,8 @@ const app = {
             app.files.push({ name: file.name, buffer: buffer, type: file.type, thumbnail: null });
         }
 
-        if (app.currentTool.id === 'delete' || app.currentTool.id === 'reorder') {
+        // Generate thumbnails for Delete, Reorder, AND Split (Pisah)
+        if (app.currentTool.id === 'delete' || app.currentTool.id === 'reorder' || app.currentTool.id === 'split') {
             if (app.files.length > 0) await app.generatePageThumbnails();
         }
 
@@ -382,6 +383,7 @@ const app = {
                 card.addEventListener('dragover', app.dragPageOver);
                 card.addEventListener('drop', app.dragPageDrop);
             } else {
+                // Delete or Split Mode
                 card.className = "page-thumb-card bg-white dark:bg-slate-800 p-2 rounded relative border border-gray-200 dark:border-slate-700";
                 if (app.pagesToDelete.has(originalIndex)) card.classList.add('to-delete');
                 card.onclick = () => app.toggleDeletePage(originalIndex);
@@ -417,11 +419,19 @@ const app = {
         const pageView = document.getElementById('page-grid-view');
         const pageGridMsg = document.getElementById('page-grid-msg');
 
-        if (toolId === 'delete' || toolId === 'reorder') {
+        // Added 'split' to the condition
+        if (toolId === 'delete' || toolId === 'reorder' || toolId === 'split') {
             generalView.classList.add('hidden');
             pageView.classList.remove('hidden');
-            if(toolId === 'delete') pageGridMsg.innerHTML = "Klik halaman yang ingin dihapus. Halaman terpilih akan ditandai merah.";
-            else pageGridMsg.innerHTML = '<i class="fa-solid fa-hand-pointer mr-2"></i> Geser (Drag & Drop) kartu untuk mengatur ulang urutan halaman.';
+            
+            if(toolId === 'delete') {
+                pageGridMsg.innerHTML = "Klik halaman yang ingin dihapus. Halaman terpilih akan ditandai merah.";
+            } else if (toolId === 'split') {
+                pageGridMsg.innerHTML = "Klik halaman yang ingin dibuang (di-split out). Halaman merah akan dihapus dari hasil.";
+            } else {
+                pageGridMsg.innerHTML = '<i class="fa-solid fa-hand-pointer mr-2"></i> Geser (Drag & Drop) kartu untuk mengatur ulang urutan halaman.';
+            }
+            
             app.renderPageGrid(); 
         } else {
             generalView.classList.remove('hidden');
@@ -562,7 +572,22 @@ const app = {
                 `;
                 break;
             case 'split':
+                // Updated Split Controls to be visually similar to Delete
+                controls.innerHTML = `
+                    <div class="space-y-6 max-w-lg mx-auto">
+                        <div>
+                            <label class="block text-sm font-bold text-red-600 dark:text-red-400 mb-2">Hapus Halaman via Range</label>
+                            <input type="text" id="split-ranges" oninput="app.syncDeleteRange(this.value)" placeholder="Contoh: 2, 4-6" class="w-full p-4 border border-red-100 dark:border-red-900/30 bg-red-50/50 dark:bg-red-900/10 rounded-xl focus:ring-4 focus:ring-red-100 dark:focus:ring-red-900/30 focus:border-red-400 outline-none text-red-800 dark:text-red-300 placeholder-red-300 dark:placeholder-red-700/50">
+                        </div>
+                        <div class="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-slate-800 pt-4">
+                            <span>Atau klik langsung pada gambar di atas untuk membuangnya.</span>
+                            <button onclick="app.pagesToDelete.clear(); app.syncDeleteRange(''); document.getElementById('split-ranges').value='';" class="text-primary hover:underline font-medium">Reset Pilihan</button>
+                        </div>
+                    </div>
+                `;
+                break;
             case 'extract':
+                // Keep extract separate if it implies keeping
                 controls.innerHTML = `
                     <div class="max-w-lg mx-auto">
                         <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-3">Pilih Halaman</label>
@@ -687,28 +712,28 @@ const app = {
                             <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-4">Mode Kompresi</label>
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <label class="cursor-pointer border border-gray-200 dark:border-slate-700 rounded-xl p-4 hover:border-primary/30 hover:bg-surface dark:hover:bg-slate-800 has-[:checked]:border-primary has-[:checked]:bg-primary/5 dark:has-[:checked]:bg-primary/20 transition bg-white dark:bg-slate-950 shadow-sm">
-                                    <input type="radio" name="compressMode" value="manual" checked class="hidden" onchange="app.toggleCompressOptions()">
-                                    <div class="font-bold text-sm text-gray-800 dark:text-gray-200 mb-1">Manual (Kualitas & PPI)</div>
-                                    <div class="text-xs text-gray-500 dark:text-gray-400">Atur sendiri kualitas dan resolusi.</div>
+                                    <input type="radio" name="compressMode" value="basic" checked class="hidden" onchange="app.toggleCompressOptions()">
+                                    <div class="font-bold text-sm text-gray-800 dark:text-gray-200 mb-1">Standar</div>
+                                    <div class="text-xs text-gray-500 dark:text-gray-400">Hapus metadata, pertahankan teks (Cepat).</div>
                                 </label>
                                 <label class="cursor-pointer border border-gray-200 dark:border-slate-700 rounded-xl p-4 hover:border-primary/30 hover:bg-surface dark:hover:bg-slate-800 has-[:checked]:border-primary has-[:checked]:bg-primary/5 dark:has-[:checked]:bg-primary/20 transition bg-white dark:bg-slate-950 shadow-sm">
-                                    <input type="radio" name="compressMode" value="auto" class="hidden" onchange="app.toggleCompressOptions()">
-                                    <div class="font-bold text-sm text-gray-800 dark:text-gray-200 mb-1">Otomatis (Target KB)</div>
-                                    <div class="text-xs text-gray-500 dark:text-gray-400">Masukkan target ukuran file.</div>
+                                    <input type="radio" name="compressMode" value="extreme" class="hidden" onchange="app.toggleCompressOptions()">
+                                    <div class="font-bold text-sm text-gray-800 dark:text-gray-200 mb-1">Ekstrem</div>
+                                    <div class="text-xs text-gray-500 dark:text-gray-400">Ubah jadi gambar, atur kualitas (Lambat).</div>
                                 </label>
                             </div>
                         </div>
 
-                        <div id="compress-manual" class="space-y-6 border-t border-gray-100 dark:border-slate-800 pt-6 animate-fade-in">
+                        <div id="compress-options" class="hidden space-y-6 border-t border-gray-100 dark:border-slate-800 pt-6 animate-fade-in">
                             <div>
-                                <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-3">Kualitas Gambar (%)</label>
+                                <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-3">Kualitas Gambar (Estimasi Ukuran)</label>
                                 <div class="flex items-center gap-4">
-                                    <input type="range" id="comp-quality" min="10" max="100" step="5" value="70" class="w-full accent-primary h-2 bg-gray-100 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer" oninput="document.getElementById('qual-val').innerText = this.value + '%'">
-                                    <span id="qual-val" class="font-bold text-primary w-14 text-right bg-primary/10 rounded px-2 py-1 text-xs">70%</span>
+                                    <input type="range" id="comp-quality" min="0.1" max="1.0" step="0.1" value="0.7" class="w-full accent-primary h-2 bg-gray-100 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer" oninput="document.getElementById('qual-val').innerText = Math.round(this.value * 100) + '%'">
+                                    <span id="qual-val" class="font-bold text-primary w-12 text-right bg-primary/10 rounded px-2 py-1 text-xs">70%</span>
                                 </div>
                                 <div class="flex justify-between text-[10px] text-gray-400 dark:text-gray-500 mt-2 font-medium uppercase tracking-wide">
-                                    <span>Rendah (Ukuran Kecil)</span>
-                                    <span>Tinggi (Ukuran Besar)</span>
+                                    <span>Ukuran Kecil</span>
+                                    <span>Kualitas Tinggi</span>
                                 </div>
                             </div>
 
@@ -719,28 +744,16 @@ const app = {
                                         <option value="72">72 PPI (Layar / Web - Kecil)</option>
                                         <option value="96">96 PPI (Standard)</option>
                                         <option value="144" selected>144 PPI (Ebook / Jelas)</option>
-                                        <option value="200">200 PPI (Cetak - Sedang)</option>
                                         <option value="300">300 PPI (Cetak - Besar)</option>
                                     </select>
                                     <i class="fa-solid fa-chevron-down absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 text-xs pointer-events-none"></i>
                                 </div>
                             </div>
-                        </div>
-
-                        <div id="compress-auto" class="hidden space-y-6 border-t border-gray-100 dark:border-slate-800 pt-6 animate-fade-in">
-                             <div>
-                                <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-3">Target Ukuran File (KB)</label>
-                                <div class="relative">
-                                    <input type="number" id="target-kb" placeholder="Contoh: 200" class="w-full p-3 border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none transition text-gray-700 dark:text-gray-200 bg-surface dark:bg-slate-950">
-                                    <span class="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 text-sm font-bold">KB</span>
-                                </div>
-                                <p class="text-xs text-gray-400 dark:text-gray-500 mt-2">Sistem akan mencoba mengompres gambar agar mendekati ukuran ini. Hasil mungkin bervariasi tergantung kompleksitas dokumen.</p>
+                            
+                            <div class="bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300 p-4 rounded-xl text-xs border border-amber-100 dark:border-amber-800/30 flex items-start">
+                                <i class="fa-solid fa-triangle-exclamation mr-3 text-sm mt-0.5"></i> 
+                                <span><b>Perhatian:</b> Mode Ekstrem akan mengubah halaman menjadi gambar (rasterize). Teks dalam PDF tidak akan bisa diblok/copy lagi.</span>
                             </div>
-                        </div>
-                        
-                        <div class="bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300 p-4 rounded-xl text-xs border border-amber-100 dark:border-amber-800/30 flex items-start">
-                            <i class="fa-solid fa-triangle-exclamation mr-3 text-sm mt-0.5"></i> 
-                            <span><b>Perhatian:</b> Kompresi ini akan mengubah halaman PDF menjadi gambar (rasterize). Teks dalam PDF tidak akan bisa diblok/copy lagi.</span>
                         </div>
                     </div>
                 `;
@@ -750,16 +763,9 @@ const app = {
     
     toggleCompressOptions: () => {
         const mode = document.querySelector('input[name="compressMode"]:checked').value;
-        const manualOpts = document.getElementById('compress-manual');
-        const autoOpts = document.getElementById('compress-auto');
-        
-        if (mode === 'manual') {
-            manualOpts.classList.remove('hidden');
-            autoOpts.classList.add('hidden');
-        } else {
-            manualOpts.classList.add('hidden');
-            autoOpts.classList.remove('hidden');
-        }
+        const options = document.getElementById('compress-options');
+        if (mode === 'extreme') options.classList.remove('hidden');
+        else options.classList.add('hidden');
     },
     
     processAction: async () => {
@@ -821,7 +827,19 @@ const app = {
                 copiedPages.forEach(p => newPdf.addPage(p));
                 resultBytes = await newPdf.save();
 
-            } else if (toolId === 'split' || toolId === 'extract') {
+            } else if (toolId === 'split') {
+                // Split logic modified to behave like "Delete" based on UI selection
+                const indicesToDelete = Array.from(app.pagesToDelete);
+                const allIndices = pdfDoc.getPageIndices();
+                const indicesToKeep = allIndices.filter(i => !indicesToDelete.includes(i));
+
+                const newPdf = await PDFDocument.create();
+                const copiedPages = await newPdf.copyPages(pdfDoc, indicesToKeep);
+                copiedPages.forEach(p => newPdf.addPage(p));
+                resultBytes = await newPdf.save();
+
+            } else if (toolId === 'extract') {
+                 // Classic extract logic (keep what is in range)
                 const rangeStr = document.getElementById('page-ranges').value;
                 const indices = app.parsePageRanges(rangeStr, pdfDoc.getPageCount());
                 const newPdf = await PDFDocument.create();
@@ -931,58 +949,43 @@ const app = {
                 
                 let quality, ppi;
                 
-                if (mode === 'auto') {
-                    // Logic to estimate quality based on Target KB
-                    // This is a naive implementation for client-side
-                    const targetKB = parseInt(document.getElementById('target-kb').value) || 500;
-                    const totalPages = app.files[0] ? (await PDFDocument.load(app.files[0].buffer)).getPageCount() : 1;
-                    
-                    // Rough estimation: Target Size per Page
-                    // Assuming A4 full color image page
-                    // Adjust quality and PPI to attempt fitting
-                    
-                    const kbPerPage = targetKB / totalPages;
-                    
-                    if (kbPerPage > 200) { quality = 0.8; ppi = 144; }
-                    else if (kbPerPage > 100) { quality = 0.6; ppi = 96; }
-                    else if (kbPerPage > 50) { quality = 0.5; ppi = 72; }
-                    else { quality = 0.3; ppi = 72; }
-                    
-                } else {
+                if (mode === 'manual') {
                     quality = parseInt(document.getElementById('comp-quality').value) / 100;
                     ppi = parseInt(document.getElementById('comp-ppi').value);
-                }
-                
-                const scale = ppi / 72; 
-                const newPdf = await PDFDocument.create();
-                
-                // Process all files
-                for (let file of app.files) {
-                    const bufferCopy = file.buffer.slice(0);
-                    const loadingTask = pdfjsLib.getDocument(new Uint8Array(bufferCopy));
-                    const pdf = await loadingTask.promise;
                     
-                    for (let i = 1; i <= pdf.numPages; i++) {
-                        const page = await pdf.getPage(i);
-                        const viewport = page.getViewport({ scale: scale });
+                    const scale = ppi / 72; 
+                    const newPdf = await PDFDocument.create();
+                    
+                    for (let file of app.files) {
+                        const bufferCopy = file.buffer.slice(0);
+                        const loadingTask = pdfjsLib.getDocument(new Uint8Array(bufferCopy));
+                        const pdf = await loadingTask.promise;
                         
-                        const canvas = document.createElement('canvas');
-                        const context = canvas.getContext('2d');
-                        canvas.height = viewport.height;
-                        canvas.width = viewport.width;
-                        
-                        await page.render({ canvasContext: context, viewport: viewport }).promise;
-                        
-                        const imgDataUrl = canvas.toDataURL('image/jpeg', quality);
-                        const img = await newPdf.embedJpg(imgDataUrl);
-                        
-                        // Dimensions in points (1/72 inch)
-                        const pageDims = [viewport.width / scale, viewport.height / scale];
-                        const newPage = newPdf.addPage(pageDims);
-                        newPage.drawImage(img, { x: 0, y: 0, width: pageDims[0], height: pageDims[1] });
+                        for (let i = 1; i <= pdf.numPages; i++) {
+                            const page = await pdf.getPage(i);
+                            const viewport = page.getViewport({ scale: scale });
+                            
+                            const canvas = document.createElement('canvas');
+                            const context = canvas.getContext('2d');
+                            canvas.height = viewport.height;
+                            canvas.width = viewport.width;
+                            
+                            await page.render({ canvasContext: context, viewport: viewport }).promise;
+                            
+                            const imgDataUrl = canvas.toDataURL('image/jpeg', quality);
+                            const img = await newPdf.embedJpg(imgDataUrl);
+                            
+                            const pageDims = [viewport.width / scale, viewport.height / scale];
+                            const newPage = newPdf.addPage(pageDims);
+                            newPage.drawImage(img, { x: 0, y: 0, width: pageDims[0], height: pageDims[1] });
+                        }
                     }
+                    resultBytes = await newPdf.save();
+                } else {
+                    // Auto mode (naive basic compression)
+                    // Or implement Target KB estimation if needed
+                    resultBytes = await pdfDoc.save({ useObjectStreams: false });
                 }
-                resultBytes = await newPdf.save();
             }
 
             app.processedPdfBytes = resultBytes;
