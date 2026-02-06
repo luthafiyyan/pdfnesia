@@ -40,6 +40,7 @@ const app = {
         { id: 'reorder', title: 'Urutkan PDF', icon: 'fa-sort', desc: 'Atur ulang urutan halaman PDF dengan drag & drop.', accept: '.pdf' },
         { id: 'split', title: 'Pisah PDF', icon: 'fa-scissors', desc: 'Pilih halaman yang ingin dibuang/dipisahkan dari dokumen.', accept: '.pdf' },
         { id: 'compress', title: 'Kompres PDF', icon: 'fa-compress', desc: 'Atur kualitas (KB/PPI) untuk memperkecil ukuran.', accept: '.pdf' },
+        { id: 'compress-img', title: 'Kompres Gambar', icon: 'fa-image', desc: 'Kecilkan ukuran file JPG/PNG dengan mengatur kualitas.', accept: 'image/*' },
         { id: 'rotate', title: 'Putar PDF', icon: 'fa-rotate-right', desc: 'Putar halaman PDF 90°, 180°, atau 270°.', accept: '.pdf' },
         { id: 'img-to-pdf', title: 'JPG ke PDF', icon: 'fa-image', desc: 'Ubah gambar JPG/PNG menjadi file PDF.', accept: 'image/*' },
         { id: 'pdf-to-img', title: 'PDF ke JPG', icon: 'fa-file-image', desc: 'Ubah halaman PDF menjadi gambar.', accept: '.pdf' },
@@ -118,7 +119,7 @@ const app = {
         const uploadDesc = document.getElementById('upload-desc');
         const uploadIcon = document.getElementById('upload-icon');
 
-        if (toolId === 'img-to-pdf') {
+        if (toolId === 'img-to-pdf' || toolId === 'compress-img') {
             uploadTitle.textContent = "Pilih Gambar JPG/PNG";
             uploadDesc.textContent = "Format PDF tidak diizinkan. Pilih gambar saja.";
             uploadIcon.className = "fa-solid fa-image";
@@ -135,7 +136,7 @@ const app = {
     },
 
     triggerUpload: () => {
-        if (app.currentTool && app.currentTool.id === 'img-to-pdf') {
+        if (app.currentTool && (app.currentTool.id === 'img-to-pdf' || app.currentTool.id === 'compress-img')) {
             document.getElementById('imgInput').click();
         } else {
             document.getElementById('fileInput').click();
@@ -183,7 +184,7 @@ const app = {
 
         btn.disabled = false;
         btn.className = "px-10 py-3.5 rounded-xl bg-primary text-white hover:bg-primaryHover shadow-lg shadow-blue-500/30 flex items-center justify-center font-bold min-w-[200px] transition-all transform hover:-translate-y-0.5 cursor-pointer w-full md:w-auto";
-        btnText.textContent = "Proses PDF";
+        btnText.textContent = "Proses";
         btnLoader.classList.add('hidden');
         btnIcon.className = "fa-solid fa-bolt ml-2";
         btnIcon.classList.remove('hidden');
@@ -199,7 +200,7 @@ const app = {
 
         btn.disabled = false;
         btn.className = "px-10 py-3.5 rounded-xl bg-green-500 text-white hover:bg-green-600 shadow-lg shadow-green-500/30 flex items-center justify-center font-bold min-w-[200px] transition-all transform hover:-translate-y-0.5 cursor-pointer w-full md:w-auto";
-        btnText.textContent = "Download PDF";
+        btnText.textContent = "Download";
         btnLoader.classList.add('hidden');
         btnIcon.className = "fa-solid fa-download ml-2";
         btnIcon.classList.remove('hidden');
@@ -758,6 +759,27 @@ const app = {
                     </div>
                 `;
                 break;
+            case 'compress-img':
+                controls.innerHTML = `
+                    <div class="space-y-6 text-left max-w-lg mx-auto">
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-3">Kualitas Gambar (%)</label>
+                            <div class="flex items-center gap-4">
+                                <input type="range" id="img-quality" min="10" max="100" step="5" value="70" class="w-full accent-primary h-2 bg-gray-100 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer" oninput="document.getElementById('img-qual-val').innerText = this.value + '%'">
+                                <span id="img-qual-val" class="font-bold text-primary w-14 text-right bg-primary/10 rounded px-2 py-1 text-xs">70%</span>
+                            </div>
+                            <div class="flex justify-between text-[10px] text-gray-400 dark:text-gray-500 mt-2 font-medium uppercase tracking-wide">
+                                <span>Rendah (Kecil)</span>
+                                <span>Tinggi (Besar)</span>
+                            </div>
+                        </div>
+                        <div class="bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-300 p-4 rounded-xl text-xs border border-blue-100 dark:border-blue-800/30 flex items-start">
+                            <i class="fa-solid fa-info-circle mr-3 text-sm mt-0.5"></i> 
+                            <span>Output akan berformat JPEG.</span>
+                        </div>
+                    </div>
+                `;
+                break;
         }
     },
     
@@ -806,9 +828,9 @@ const app = {
             const toolId = app.currentTool.id;
             let resultBytes = null;
             let pdfDoc;
-            if (toolId !== 'img-to-pdf') {
+            if (toolId !== 'img-to-pdf' && toolId !== 'compress-img') {
                 pdfDoc = await PDFDocument.load(app.files[0].buffer);
-            } else {
+            } else if (toolId !== 'compress-img') {
                 pdfDoc = await PDFDocument.create();
             }
 
@@ -947,45 +969,68 @@ const app = {
             } else if (toolId === 'compress') {
                 const mode = document.querySelector('input[name="compressMode"]:checked').value;
                 
-                let quality, ppi;
-                
-                if (mode === 'manual') {
-                    quality = parseInt(document.getElementById('comp-quality').value) / 100;
-                    ppi = parseInt(document.getElementById('comp-ppi').value);
-                    
+                if (mode === 'basic') {
+                    resultBytes = await pdfDoc.save();
+                } else {
+                    const quality = parseFloat(document.getElementById('comp-quality').value);
+                    const ppi = parseInt(document.getElementById('comp-ppi').value);
                     const scale = ppi / 72; 
                     const newPdf = await PDFDocument.create();
-                    
                     for (let file of app.files) {
                         const bufferCopy = file.buffer.slice(0);
                         const loadingTask = pdfjsLib.getDocument(new Uint8Array(bufferCopy));
                         const pdf = await loadingTask.promise;
-                        
                         for (let i = 1; i <= pdf.numPages; i++) {
                             const page = await pdf.getPage(i);
                             const viewport = page.getViewport({ scale: scale });
-                            
                             const canvas = document.createElement('canvas');
                             const context = canvas.getContext('2d');
                             canvas.height = viewport.height;
                             canvas.width = viewport.width;
-                            
                             await page.render({ canvasContext: context, viewport: viewport }).promise;
-                            
                             const imgDataUrl = canvas.toDataURL('image/jpeg', quality);
                             const img = await newPdf.embedJpg(imgDataUrl);
-                            
                             const pageDims = [viewport.width / scale, viewport.height / scale];
                             const newPage = newPdf.addPage(pageDims);
                             newPage.drawImage(img, { x: 0, y: 0, width: pageDims[0], height: pageDims[1] });
                         }
                     }
                     resultBytes = await newPdf.save();
-                } else {
-                    // Auto mode (naive basic compression)
-                    // Or implement Target KB estimation if needed
-                    resultBytes = await pdfDoc.save({ useObjectStreams: false });
                 }
+            } else if (toolId === 'compress-img') {
+                const quality = parseInt(document.getElementById('img-quality').value) / 100;
+                
+                // Process files sequentially
+                for (let i = 0; i < app.files.length; i++) {
+                    const file = app.files[i];
+                    const image = new Image();
+                    const url = URL.createObjectURL(new Blob([file.buffer], { type: file.type }));
+                    
+                    await new Promise((resolve) => {
+                        image.onload = () => resolve();
+                        image.src = url;
+                    });
+
+                    const canvas = document.createElement('canvas');
+                    canvas.width = image.width;
+                    canvas.height = image.height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(image, 0, 0);
+
+                    const dataUrl = canvas.toDataURL('image/jpeg', quality);
+                    
+                    // Naming
+                    const originalName = file.name.replace(/\.[^/.]+$/, "");
+                    const resultName = `${originalName}_kompres.jpg`;
+                    
+                    // Simple delay to prevent browser blocking multiple downloads if many files
+                    if (i > 0) await new Promise(r => setTimeout(r, 500));
+                    
+                    download(dataUrl, resultName, "image/jpeg");
+                }
+                
+                app.resetButtonState();
+                return; // Exit
             }
 
             app.processedPdfBytes = resultBytes;
