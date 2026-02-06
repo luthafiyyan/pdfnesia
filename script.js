@@ -842,7 +842,7 @@ const app = {
             
             // FIX: Only load the first file as PDF if the tool modifies a single PDF.
             // Merge and Img-to-PDF allow images as input, so we shouldn't try to parse the first file as PDF immediately.
-            if (['split', 'reorder', 'compress', 'rotate', 'number', 'delete'].includes(toolId)) {
+            if (['split', 'reorder', 'compress', 'rotate', 'number', 'delete', 'extract', 'pdf-to-img'].includes(toolId)) {
                 pdfDoc = await PDFDocument.load(app.files[0].buffer);
             } else {
                 // For Merge and Image tools, we start with a blank document
@@ -957,22 +957,48 @@ const app = {
                 resultBytes = await pdfDoc.save();
 
             } else if (toolId === 'pdf-to-img') {
-                alert("Versi demo: Mengunduh halaman pertama sebagai JPG.");
                 const bufferCopy = app.files[0].buffer.slice(0);
                 const loadingTask = pdfjsLib.getDocument(new Uint8Array(bufferCopy));
                 const pdf = await loadingTask.promise;
-                const page = await pdf.getPage(1);
-                const scale = 2.0;
-                const viewport = page.getViewport({scale});
-                const canvas = document.createElement('canvas');
-                const context = canvas.getContext('2d');
-                canvas.height = viewport.height;
-                canvas.width = viewport.width;
-                await page.render({canvasContext: context, viewport: viewport}).promise;
-                const jpgUrl = canvas.toDataURL('image/jpeg');
-                const originalName = app.files[0] ? app.files[0].name.replace(/\.pdf$/i, '') : 'document';
-                const resultName = `${originalName}_convert.jpg`;
-                download(jpgUrl, resultName, "image/jpeg");
+                const pageCount = pdf.numPages;
+
+                if (pageCount === 1) {
+                    // Single page -> Download JPG directly
+                    const page = await pdf.getPage(1);
+                    const scale = 2.0;
+                    const viewport = page.getViewport({scale});
+                    const canvas = document.createElement('canvas');
+                    const context = canvas.getContext('2d');
+                    canvas.height = viewport.height;
+                    canvas.width = viewport.width;
+                    await page.render({canvasContext: context, viewport: viewport}).promise;
+                    const jpgUrl = canvas.toDataURL('image/jpeg');
+                    const originalName = app.files[0] ? app.files[0].name.replace(/\.pdf$/i, '') : 'document';
+                    download(jpgUrl, `${originalName}.jpg`, "image/jpeg");
+                } else {
+                    // Multiple pages -> ZIP
+                    const zip = new JSZip();
+                    const originalName = app.files[0] ? app.files[0].name.replace(/\.pdf$/i, '') : 'document';
+
+                    for (let i = 1; i <= pageCount; i++) {
+                        const page = await pdf.getPage(i);
+                        const scale = 2.0;
+                        const viewport = page.getViewport({scale});
+                        const canvas = document.createElement('canvas');
+                        const context = canvas.getContext('2d');
+                        canvas.height = viewport.height;
+                        canvas.width = viewport.width;
+                        await page.render({canvasContext: context, viewport: viewport}).promise;
+                        
+                        // Get base64 content without the prefix data:image/jpeg;base64,
+                        const imgData = canvas.toDataURL('image/jpeg').split(',')[1];
+                        zip.file(`${originalName}_page-${i}.jpg`, imgData, {base64: true});
+                    }
+                    
+                    const content = await zip.generateAsync({type:"blob"});
+                    download(content, `${originalName}_images.zip`, "application/zip");
+                }
+                
                 app.resetButtonState(); 
                 return; 
 
