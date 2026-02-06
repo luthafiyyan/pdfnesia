@@ -242,8 +242,8 @@ const app = {
             app.files.push({ name: file.name, buffer: buffer, type: file.type, thumbnail: null });
         }
 
-        // Generate thumbnails for Delete, Reorder, AND Split (Pisah)
-        if (app.currentTool.id === 'delete' || app.currentTool.id === 'reorder' || app.currentTool.id === 'split') {
+        // Generate thumbnails for Delete, Reorder, Split AND PDF-to-JPG
+        if (app.currentTool.id === 'delete' || app.currentTool.id === 'reorder' || app.currentTool.id === 'split' || app.currentTool.id === 'pdf-to-img') {
             if (app.files.length > 0) await app.generatePageThumbnails();
         }
 
@@ -394,11 +394,14 @@ const app = {
                 card.addEventListener('dragstart', app.dragPageStart);
                 card.addEventListener('dragover', app.dragPageOver);
                 card.addEventListener('drop', app.dragPageDrop);
-            } else {
+            } else if (app.currentTool.id === 'delete' || app.currentTool.id === 'split') {
                 // Delete or Split Mode
                 card.className = "page-thumb-card bg-white dark:bg-slate-800 p-2 rounded relative border border-gray-200 dark:border-slate-700";
                 if (app.pagesToDelete.has(originalIndex)) card.classList.add('to-delete');
                 card.onclick = () => app.toggleDeletePage(originalIndex);
+            } else {
+                 // Default view (e.g., pdf-to-img) - Just display
+                 card.className = "bg-white dark:bg-slate-800 p-2 rounded relative border border-gray-200 dark:border-slate-700 shadow-sm";
             }
 
             const img = document.createElement('img');
@@ -431,8 +434,7 @@ const app = {
         const pageView = document.getElementById('page-grid-view');
         const pageGridMsg = document.getElementById('page-grid-msg');
 
-        // Added 'split' to the condition
-        if (toolId === 'delete' || toolId === 'reorder' || toolId === 'split') {
+        if (toolId === 'delete' || toolId === 'reorder' || toolId === 'split' || toolId === 'pdf-to-img') {
             generalView.classList.add('hidden');
             pageView.classList.remove('hidden');
             
@@ -440,6 +442,8 @@ const app = {
                 pageGridMsg.innerHTML = "Klik halaman yang ingin dihapus. Halaman terpilih akan ditandai merah.";
             } else if (toolId === 'split') {
                 pageGridMsg.innerHTML = "Klik halaman yang ingin dibuang (di-split out). Halaman merah akan dihapus dari hasil.";
+            } else if (toolId === 'pdf-to-img') {
+                pageGridMsg.innerHTML = "Semua halaman akan dikonversi menjadi gambar JPG.";
             } else {
                 pageGridMsg.innerHTML = '<i class="fa-solid fa-hand-pointer mr-2"></i> Geser (Drag & Drop) kartu untuk mengatur ulang urutan halaman.';
             }
@@ -791,6 +795,9 @@ const app = {
                     </div>
                 `;
                 break;
+            case 'pdf-to-img':
+                 // Fallthrough - but added message via renderProcessUI logic for pageGridMsg
+                 break;
         }
     },
     
