@@ -36,7 +36,7 @@ const app = {
     dragPageStartIndex: null, 
 
     tools: [
-        { id: 'merge', title: 'Gabung PDF', icon: 'fa-layer-group', desc: 'Satukan banyak file PDF menjadi satu urutan.', accept: '.pdf' },
+        { id: 'merge', title: 'Gabung PDF & Gambar', icon: 'fa-layer-group', desc: 'Satukan file PDF, JPG, dan PNG menjadi satu dokumen PDF.', accept: '.pdf,image/jpeg,image/png' },
         { id: 'reorder', title: 'Urutkan PDF', icon: 'fa-sort', desc: 'Atur ulang urutan halaman PDF dengan drag & drop.', accept: '.pdf' },
         { id: 'split', title: 'Pisah PDF', icon: 'fa-scissors', desc: 'Pilih halaman yang ingin dibuang/dipisahkan dari dokumen.', accept: '.pdf' },
         { id: 'compress', title: 'Kompres PDF', icon: 'fa-compress', desc: 'Atur kualitas (KB/PPI) untuk memperkecil ukuran.', accept: '.pdf' },
@@ -118,11 +118,21 @@ const app = {
         const uploadTitle = document.getElementById('upload-title');
         const uploadDesc = document.getElementById('upload-desc');
         const uploadIcon = document.getElementById('upload-icon');
+        const fileInput = document.getElementById('fileInput');
+
+        // Set accepted file types dynamically based on tool configuration
+        if (app.currentTool.accept) {
+            fileInput.accept = app.currentTool.accept;
+        }
 
         if (toolId === 'img-to-pdf' || toolId === 'compress-img') {
             uploadTitle.textContent = "Pilih Gambar JPG/PNG";
             uploadDesc.textContent = "Format PDF tidak diizinkan. Pilih gambar saja.";
             uploadIcon.className = "fa-solid fa-image";
+        } else if (toolId === 'merge') {
+            uploadTitle.textContent = "Pilih File (PDF/JPG/PNG)";
+            uploadDesc.textContent = "Gabungkan berbagai format file sekaligus.";
+            uploadIcon.className = "fa-solid fa-layer-group";
         } else {
             uploadTitle.textContent = "Pilih File PDF";
             uploadDesc.textContent = "Bisa upload banyak file sekaligus";
@@ -136,6 +146,7 @@ const app = {
     },
 
     triggerUpload: () => {
+        // Use imgInput only for strict image tools, otherwise use dynamic fileInput
         if (app.currentTool && (app.currentTool.id === 'img-to-pdf' || app.currentTool.id === 'compress-img')) {
             document.getElementById('imgInput').click();
         } else {
@@ -222,8 +233,8 @@ const app = {
     handleFileUpload: async (fileList) => {
         if (fileList.length === 0) return;
         app.showLoading(true, "Membaca file...");
-        const isMerge = app.currentTool && app.currentTool.id === 'merge';
-        const isAppend = isMerge && app.files.length > 0;
+        
+        const isAppend = (app.currentTool && app.currentTool.id === 'merge') && app.files.length > 0;
         if (!isAppend) app.files = [];
         
         for (let file of fileList) {
@@ -547,7 +558,7 @@ const app = {
             case 'merge':
                 controls.innerHTML = `
                     <div class="text-center">
-                        <h5 class="font-bold text-gray-800 dark:text-white text-lg mb-2">Gabungkan File PDF</h5>
+                        <h5 class="font-bold text-gray-800 dark:text-white text-lg mb-2">Gabungkan File PDF & Gambar</h5>
                         <p class="text-gray-500 dark:text-gray-400 text-sm mb-6 max-w-md mx-auto">Urutan file dalam PDF akhir akan mengikuti urutan kartu di atas. Geser kartu untuk mengubah urutan.</p>
                         
                         <div class="flex flex-col sm:flex-row justify-center gap-4 items-center">
@@ -555,7 +566,7 @@ const app = {
                                 <i class="fa-solid fa-layer-group mr-2"></i> Total: ${app.files.length} file
                             </div>
                             <button onclick="document.getElementById('fileInput').click()" class="px-5 py-2 border-2 border-dashed border-primary text-primary rounded-xl hover:bg-surface dark:hover:bg-slate-800 font-bold text-sm transition flex items-center justify-center w-full sm:w-auto">
-                                <i class="fa-solid fa-plus mr-2"></i> Tambah PDF
+                                <i class="fa-solid fa-plus mr-2"></i> Tambah File
                             </button>
                         </div>
                     </div>
@@ -837,9 +848,20 @@ const app = {
             if (toolId === 'merge') {
                 const mergedPdf = await PDFDocument.create();
                 for (let file of app.files) {
-                    const srcPdf = await PDFDocument.load(file.buffer);
-                    const copiedPages = await mergedPdf.copyPages(srcPdf, srcPdf.getPageIndices());
-                    copiedPages.forEach((page) => mergedPdf.addPage(page));
+                    if (file.type === 'application/pdf') {
+                        const srcPdf = await PDFDocument.load(file.buffer);
+                        const copiedPages = await mergedPdf.copyPages(srcPdf, srcPdf.getPageIndices());
+                        copiedPages.forEach((page) => mergedPdf.addPage(page));
+                    } else if (file.type === 'image/jpeg' || file.type === 'image/png') {
+                        let image;
+                        if (file.type === 'image/jpeg') image = await mergedPdf.embedJpg(file.buffer);
+                        else image = await mergedPdf.embedPng(file.buffer);
+                        
+                        const page = mergedPdf.addPage([image.width, image.height]);
+                        page.drawImage(image, {
+                            x: 0, y: 0, width: image.width, height: image.height
+                        });
+                    }
                 }
                 resultBytes = await mergedPdf.save();
 
@@ -968,7 +990,6 @@ const app = {
 
             } else if (toolId === 'compress') {
                 const mode = document.querySelector('input[name="compressMode"]:checked').value;
-                
                 if (mode === 'basic') {
                     resultBytes = await pdfDoc.save();
                 } else {
