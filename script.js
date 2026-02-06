@@ -839,14 +839,20 @@ const app = {
             const toolId = app.currentTool.id;
             let resultBytes = null;
             let pdfDoc;
-            if (toolId !== 'img-to-pdf' && toolId !== 'compress-img') {
+            
+            // FIX: Only load the first file as PDF if the tool modifies a single PDF.
+            // Merge and Img-to-PDF allow images as input, so we shouldn't try to parse the first file as PDF immediately.
+            if (['split', 'reorder', 'compress', 'rotate', 'number', 'delete'].includes(toolId)) {
                 pdfDoc = await PDFDocument.load(app.files[0].buffer);
-            } else if (toolId !== 'compress-img') {
-                pdfDoc = await PDFDocument.create();
+            } else {
+                // For Merge and Image tools, we start with a blank document
+                if (toolId !== 'compress-img') {
+                    pdfDoc = await PDFDocument.create();
+                }
             }
 
             if (toolId === 'merge') {
-                const mergedPdf = await PDFDocument.create();
+                const mergedPdf = pdfDoc;
                 for (let file of app.files) {
                     if (file.type === 'application/pdf') {
                         const srcPdf = await PDFDocument.load(file.buffer);
