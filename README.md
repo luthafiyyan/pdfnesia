@@ -7,7 +7,7 @@ PDFnesia ini jalan 100% di browser lo. Jadi, file PDF yang lo proses nggak akan 
 
 ---
 
-##🔥 Fitur Utama
+## 🔥 Fitur Utama
 - Lengkap buat kebutuhan administrasi sehari-hari:
 - Gabung PDF (Merge): Satukan banyak file jadi satu dokumen.
 - Urutkan Halaman (Reorder): Tinggal drag & drop buat tuker posisi halaman. Enak banget UX-nya.
@@ -20,7 +20,7 @@ PDFnesia ini jalan 100% di browser lo. Jadi, file PDF yang lo proses nggak akan 
 
 ---
 
-##🛠️ Dibuat Pakai Apa?
+## 🛠️ Dibuat Pakai Apa?
 Gue sengaja nggak pake framework JS berat kayak React atau Vue buat proyek ini, biar filenya enteng dan gampang dipelajari strukturnya.
 - HTML5 & Vanilla JavaScript: Back to basics.
 - Tailwind CSS: Biar styling-nya ganteng dan responsif (via CDN).
@@ -28,7 +28,7 @@ Gue sengaja nggak pake framework JS berat kayak React atau Vue buat proyek ini, 
 - pdf.js: Buat ngerender preview halaman biar bisa dilihat di browser.
 
 ---
-##🔒 Privasi (Penting!)
+## 🔒 Privasi (Penting!)
 
 Sekali lagi, aplikasi ini Serverless. Gak ada database, gak ada API upload.
 Kalo lo matiin internet pun, aplikasi ini tetep bisa jalan (kecuali buat nge-load library CDN pertama kali). Jadi aman banget buat dokumen sensitif kayak KTP, Ijazah, atau Surat Perjanjian.
