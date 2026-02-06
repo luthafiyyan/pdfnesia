@@ -1,4 +1,4 @@
-# pdfnesia
+# PDFnesia
 Solusi PDF Mudah & Aman (Client-Side)
 
 Iseng bikin tools buat ngelola file PDF karena sering males kalau harus upload dokumen penting ke website konverter online yang servernya kita nggak tau di mana.
@@ -28,3 +28,12 @@ Gue sengaja nggak pake framework JS berat kayak React atau Vue buat proyek ini, 
 - pdf.js: Buat ngerender preview halaman biar bisa dilihat di browser.
 
 ---
+##🔒 Privasi (Penting!)
+
+Sekali lagi, aplikasi ini Serverless. Gak ada database, gak ada API upload.
+Kalo lo matiin internet pun, aplikasi ini tetep bisa jalan (kecuali buat nge-load library CDN pertama kali). Jadi aman banget buat dokumen sensitif kayak KTP, Ijazah, atau Surat Perjanjian.
+
+---
+
+## 👨‍💻 Author
+Made with ❤️ by <a href="https://www.instagram.com/luthafiyyan_/" target="_blank" rel="noopener noreferrer" class="text-primary hover:text-indigo-600 dark:hover:text-indigo-400 font-medium transition-colors">Luthafiyyan</a> Powered by Caffeine & Good Vibes ☕✨
