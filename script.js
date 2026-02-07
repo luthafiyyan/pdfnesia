@@ -42,6 +42,7 @@ const app = {
         { id: 'compress', title: 'Kompres PDF', icon: 'fa-compress', desc: 'Atur kualitas (KB/PPI) untuk memperkecil ukuran.', accept: '.pdf' },
         { id: 'compress-img', title: 'Kompres Gambar', icon: 'fa-image', desc: 'Kecilkan ukuran file JPG/PNG dengan mengatur kualitas.', accept: 'image/*' },
         { id: 'rotate', title: 'Putar PDF', icon: 'fa-rotate-right', desc: 'Putar halaman PDF 90°, 180°, atau 270°.', accept: '.pdf' },
+        { id: 'word-to-pdf', title: 'Word ke PDF', icon: 'fa-file-word', desc: 'Ubah dokumen Word (.docx) menjadi PDF.', accept: '.docx' },
         { id: 'img-to-pdf', title: 'JPG ke PDF', icon: 'fa-image', desc: 'Ubah gambar JPG/PNG menjadi file PDF.', accept: 'image/*' },
         { id: 'pdf-to-img', title: 'PDF ke JPG', icon: 'fa-file-image', desc: 'Ubah halaman PDF menjadi gambar.', accept: '.pdf' },
         { id: 'number', title: 'Nomor Halaman', icon: 'fa-list-ol', desc: 'Tambahkan penomoran halaman otomatis.', accept: '.pdf' },
@@ -129,6 +130,10 @@ const app = {
             uploadTitle.textContent = "Pilih Gambar JPG/PNG";
             uploadDesc.textContent = "Format PDF tidak diizinkan. Pilih gambar saja.";
             uploadIcon.className = "fa-solid fa-image";
+        } else if (toolId === 'word-to-pdf') {
+            uploadTitle.textContent = "Pilih File Word (.docx)";
+            uploadDesc.textContent = "Format .doc tidak didukung. Gunakan .docx.";
+            uploadIcon.className = "fa-solid fa-file-word";
         } else if (toolId === 'merge') {
             uploadTitle.textContent = "Pilih File (PDF/JPG/PNG)";
             uploadDesc.textContent = "Gabungkan berbagai format file sekaligus.";
@@ -243,7 +248,7 @@ const app = {
         }
 
         // Generate thumbnails for Delete, Reorder, Split AND PDF-to-JPG
-        if (app.currentTool.id === 'delete' || app.currentTool.id === 'reorder' || app.currentTool.id === 'split' || app.currentTool.id === 'pdf-to-img') {
+        if (['delete', 'reorder', 'split', 'pdf-to-img'].includes(app.currentTool.id)) {
             if (app.files.length > 0) await app.generatePageThumbnails();
         }
 
@@ -434,6 +439,7 @@ const app = {
         const pageView = document.getElementById('page-grid-view');
         const pageGridMsg = document.getElementById('page-grid-msg');
 
+        // Updated conditions for grid view
         if (toolId === 'delete' || toolId === 'reorder' || toolId === 'split' || toolId === 'pdf-to-img') {
             generalView.classList.add('hidden');
             pageView.classList.remove('hidden');
@@ -484,6 +490,8 @@ const app = {
                         else img.style.transform = `rotate(0deg)`;
                     }
                     previewBox.appendChild(img);
+                } else if (file.name.endsWith('.docx')) {
+                     previewBox.innerHTML = '<i class="fa-solid fa-file-word text-4xl text-blue-500"></i>';
                 } else {
                     previewBox.innerHTML = '<div class="loader w-6 h-6 border-2 border-gray-300 border-t-primary"></div>';
                 }
@@ -511,7 +519,7 @@ const app = {
                 card.appendChild(removeBtn);
                 listContainer.appendChild(card);
 
-                if (!file.thumbnail) {
+                if (!file.thumbnail && !file.name.endsWith('.docx')) {
                     setTimeout(async () => {
                         try {
                             previewBox.innerHTML = '';
@@ -626,6 +634,14 @@ const app = {
                             <span>Atau klik langsung pada gambar di atas.</span>
                             <button onclick="app.pagesToDelete.clear(); app.syncDeleteRange(''); document.getElementById('delete-ranges').value='';" class="text-primary hover:underline font-medium">Reset Pilihan</button>
                         </div>
+                    </div>
+                `;
+                break;
+            case 'word-to-pdf':
+                controls.innerHTML = `
+                    <div class="bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-300 p-4 rounded-xl text-xs border border-blue-100 dark:border-blue-800/30 flex items-start">
+                        <i class="fa-solid fa-info-circle mr-3 text-sm mt-0.5"></i> 
+                        <span>Konversi akan mempertahankan teks dan layout sederhana. Gambar dan tabel kompleks mungkin sedikit bergeser.</span>
                     </div>
                 `;
                 break;
@@ -795,9 +811,6 @@ const app = {
                     </div>
                 `;
                 break;
-            case 'pdf-to-img':
-                 // Fallthrough - but added message via renderProcessUI logic for pageGridMsg
-                 break;
         }
     },
     
@@ -963,6 +976,46 @@ const app = {
                 }
                 resultBytes = await pdfDoc.save();
 
+            } else if (toolId === 'word-to-pdf') {
+                for (let i = 0; i < app.files.length; i++) {
+                    const file = app.files[i];
+                    const arrayBuffer = file.buffer;
+                    
+                    const options = {
+                        styleMap: [
+                            "p[style-name='Section Title'] => h1:fresh",
+                            "p[style-name='Subsection Title'] => h2:fresh"
+                        ]
+                    };
+
+                    const result = await mammoth.convertToHtml({ arrayBuffer: arrayBuffer }, options);
+                    const htmlContent = result.value;
+
+                    const element = document.createElement('div');
+                    element.className = 'pdf-content';
+                    element.innerHTML = htmlContent;
+                    element.style.fontFamily = 'Times New Roman, serif';
+                    element.style.fontSize = '12pt';
+                    element.style.lineHeight = '1.5';
+                    element.style.textAlign = 'justify';
+                    
+                    const originalName = file.name.replace(/\.[^/.]+$/, "");
+                    
+                    const opt = {
+                        margin:       [10, 10], 
+                        filename:     `${originalName}_convert.pdf`,
+                        image:        { type: 'jpeg', quality: 0.98 },
+                        html2canvas:  { scale: 2, useCORS: true },
+                        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+                    };
+
+                    await html2pdf().set(opt).from(element).save();
+                    
+                    if (i < app.files.length - 1) await new Promise(r => setTimeout(r, 1000));
+                }
+                app.resetButtonState();
+                return;
+
             } else if (toolId === 'pdf-to-img') {
                 const bufferCopy = app.files[0].buffer.slice(0);
                 const loadingTask = pdfjsLib.getDocument(new Uint8Array(bufferCopy));
@@ -970,7 +1023,6 @@ const app = {
                 const pageCount = pdf.numPages;
 
                 if (pageCount === 1) {
-                    // Single page -> Download JPG directly
                     const page = await pdf.getPage(1);
                     const scale = 2.0;
                     const viewport = page.getViewport({scale});
@@ -983,7 +1035,6 @@ const app = {
                     const originalName = app.files[0] ? app.files[0].name.replace(/\.pdf$/i, '') : 'document';
                     download(jpgUrl, `${originalName}.jpg`, "image/jpeg");
                 } else {
-                    // Multiple pages -> ZIP
                     const zip = new JSZip();
                     const originalName = app.files[0] ? app.files[0].name.replace(/\.pdf$/i, '') : 'document';
 
@@ -997,7 +1048,6 @@ const app = {
                         canvas.width = viewport.width;
                         await page.render({canvasContext: context, viewport: viewport}).promise;
                         
-                        // Get base64 content without the prefix data:image/jpeg;base64,
                         const imgData = canvas.toDataURL('image/jpeg').split(',')[1];
                         zip.file(`${originalName}_page-${i}.jpg`, imgData, {base64: true});
                     }
