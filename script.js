@@ -811,6 +811,9 @@ const app = {
                     </div>
                 `;
                 break;
+            case 'pdf-to-img':
+                 // Fallthrough - but added message via renderProcessUI logic for pageGridMsg
+                 break;
         }
     },
     
@@ -979,7 +982,9 @@ const app = {
             } else if (toolId === 'word-to-pdf') {
                 for (let i = 0; i < app.files.length; i++) {
                     const file = app.files[i];
-                    const arrayBuffer = file.buffer;
+                    
+                    // Important: Slice the buffer to avoid issues if it was transferred
+                    const arrayBuffer = file.buffer.slice(0);
                     
                     const options = {
                         styleMap: [
@@ -988,29 +993,56 @@ const app = {
                         ]
                     };
 
-                    const result = await mammoth.convertToHtml({ arrayBuffer: arrayBuffer }, options);
-                    const htmlContent = result.value;
+                    try {
+                        const result = await mammoth.convertToHtml({ arrayBuffer: arrayBuffer }, options);
+                        const htmlContent = result.value;
+                        
+                        if (!htmlContent.trim()) {
+                            alert(`File ${file.name} tidak berisi teks yang dapat dibaca oleh sistem (mungkin berisi gambar scan/text box).`);
+                            continue;
+                        }
 
-                    const element = document.createElement('div');
-                    element.className = 'pdf-content';
-                    element.innerHTML = htmlContent;
-                    element.style.fontFamily = 'Times New Roman, serif';
-                    element.style.fontSize = '12pt';
-                    element.style.lineHeight = '1.5';
-                    element.style.textAlign = 'justify';
-                    
-                    const originalName = file.name.replace(/\.[^/.]+$/, "");
-                    
-                    const opt = {
-                        margin:       [10, 10], 
-                        filename:     `${originalName}_convert.pdf`,
-                        image:        { type: 'jpeg', quality: 0.98 },
-                        html2canvas:  { scale: 2, useCORS: true },
-                        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
-                    };
+                        // Create a container that is visible to the DOM engine but hidden from user
+                        const element = document.createElement('div');
+                        element.innerHTML = htmlContent;
+                        
+                        // Apply styling to mimic a document page
+                        Object.assign(element.style, {
+                            position: 'absolute',
+                            left: '-9999px',
+                            top: '0',
+                            width: '800px', // Standard A4 width approx (minus margins)
+                            fontFamily: 'Times New Roman, serif',
+                            fontSize: '12pt',
+                            lineHeight: '1.5',
+                            textAlign: 'justify',
+                            color: '#000000',
+                            backgroundColor: '#ffffff',
+                            padding: '20px'
+                        });
 
-                    await html2pdf().set(opt).from(element).save();
-                    
+                        document.body.appendChild(element);
+                        
+                        const originalName = file.name.replace(/\.[^/.]+$/, "");
+                        
+                        const opt = {
+                            margin:       10, // mm
+                            filename:     `${originalName}_convert.pdf`,
+                            image:        { type: 'jpeg', quality: 0.98 },
+                            html2canvas:  { scale: 2, useCORS: true, logging: false },
+                            jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+                        };
+
+                        await html2pdf().set(opt).from(element).save();
+                        
+                        // Clean up
+                        document.body.removeChild(element);
+
+                    } catch (e) {
+                        console.error("Conversion error:", e);
+                        alert(`Gagal mengonversi ${file.name}. Pastikan file .docx tidak rusak.`);
+                    }
+
                     if (i < app.files.length - 1) await new Promise(r => setTimeout(r, 1000));
                 }
                 app.resetButtonState();
@@ -1023,6 +1055,7 @@ const app = {
                 const pageCount = pdf.numPages;
 
                 if (pageCount === 1) {
+                    // Single page -> Download JPG directly
                     const page = await pdf.getPage(1);
                     const scale = 2.0;
                     const viewport = page.getViewport({scale});
@@ -1035,6 +1068,7 @@ const app = {
                     const originalName = app.files[0] ? app.files[0].name.replace(/\.pdf$/i, '') : 'document';
                     download(jpgUrl, `${originalName}.jpg`, "image/jpeg");
                 } else {
+                    // Multiple pages -> ZIP
                     const zip = new JSZip();
                     const originalName = app.files[0] ? app.files[0].name.replace(/\.pdf$/i, '') : 'document';
 
@@ -1048,6 +1082,7 @@ const app = {
                         canvas.width = viewport.width;
                         await page.render({canvasContext: context, viewport: viewport}).promise;
                         
+                        // Get base64 content without the prefix data:image/jpeg;base64,
                         const imgData = canvas.toDataURL('image/jpeg').split(',')[1];
                         zip.file(`${originalName}_page-${i}.jpg`, imgData, {base64: true});
                     }
