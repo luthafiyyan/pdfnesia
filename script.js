@@ -753,30 +753,42 @@ const app = {
                     <div class="space-y-6 text-left max-w-lg mx-auto">
                         <div>
                             <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-4">Mode Kompresi</label>
-                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <label class="cursor-pointer border border-gray-200 dark:border-slate-700 rounded-xl p-4 hover:border-primary/30 hover:bg-surface dark:hover:bg-slate-800 has-[:checked]:border-primary has-[:checked]:bg-primary/5 dark:has-[:checked]:bg-primary/20 transition bg-white dark:bg-slate-950 shadow-sm">
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                <label class="cursor-pointer border border-gray-200 dark:border-slate-700 rounded-xl p-3 hover:border-primary/30 hover:bg-surface dark:hover:bg-slate-800 has-[:checked]:border-primary has-[:checked]:bg-primary/5 dark:has-[:checked]:bg-primary/20 transition bg-white dark:bg-slate-950 shadow-sm flex flex-col justify-center text-center h-full">
                                     <input type="radio" name="compressMode" value="basic" checked class="hidden" onchange="app.toggleCompressOptions()">
                                     <div class="font-bold text-sm text-gray-800 dark:text-gray-200 mb-1">Standar</div>
-                                    <div class="text-xs text-gray-500 dark:text-gray-400">Hapus metadata, pertahankan teks (Cepat).</div>
+                                    <div class="text-[10px] text-gray-500 dark:text-gray-400 leading-tight">Hapus metadata (Lossless)</div>
                                 </label>
-                                <label class="cursor-pointer border border-gray-200 dark:border-slate-700 rounded-xl p-4 hover:border-primary/30 hover:bg-surface dark:hover:bg-slate-800 has-[:checked]:border-primary has-[:checked]:bg-primary/5 dark:has-[:checked]:bg-primary/20 transition bg-white dark:bg-slate-950 shadow-sm">
-                                    <input type="radio" name="compressMode" value="extreme" class="hidden" onchange="app.toggleCompressOptions()">
-                                    <div class="font-bold text-sm text-gray-800 dark:text-gray-200 mb-1">Ekstrem</div>
-                                    <div class="text-xs text-gray-500 dark:text-gray-400">Ubah jadi gambar, atur kualitas (Lambat).</div>
+                                <label class="cursor-pointer border border-gray-200 dark:border-slate-700 rounded-xl p-3 hover:border-primary/30 hover:bg-surface dark:hover:bg-slate-800 has-[:checked]:border-primary has-[:checked]:bg-primary/5 dark:has-[:checked]:bg-primary/20 transition bg-white dark:bg-slate-950 shadow-sm flex flex-col justify-center text-center h-full">
+                                    <input type="radio" name="compressMode" value="manual" class="hidden" onchange="app.toggleCompressOptions()">
+                                    <div class="font-bold text-sm text-gray-800 dark:text-gray-200 mb-1">Manual</div>
+                                    <div class="text-[10px] text-gray-500 dark:text-gray-400 leading-tight">Atur DPI & Kualitas</div>
+                                </label>
+                                <label class="cursor-pointer border border-gray-200 dark:border-slate-700 rounded-xl p-3 hover:border-primary/30 hover:bg-surface dark:hover:bg-slate-800 has-[:checked]:border-primary has-[:checked]:bg-primary/5 dark:has-[:checked]:bg-primary/20 transition bg-white dark:bg-slate-950 shadow-sm flex flex-col justify-center text-center h-full">
+                                    <input type="radio" name="compressMode" value="auto" class="hidden" onchange="app.toggleCompressOptions()">
+                                    <div class="font-bold text-sm text-gray-800 dark:text-gray-200 mb-1">Target</div>
+                                    <div class="text-[10px] text-gray-500 dark:text-gray-400 leading-tight">Set Ukuran File (KB)</div>
                                 </label>
                             </div>
                         </div>
 
-                        <div id="compress-options" class="hidden space-y-6 border-t border-gray-100 dark:border-slate-800 pt-6 animate-fade-in">
+                        <!-- Basic Info -->
+                        <div id="compress-basic" class="bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-300 p-4 rounded-xl text-xs border border-blue-100 dark:border-blue-800/30 flex items-start animate-fade-in">
+                            <i class="fa-solid fa-info-circle mr-3 text-sm mt-0.5"></i> 
+                            <span>Mode ini membersihkan data sampah tanpa mengurangi kualitas visual. Cocok untuk dokumen teks.</span>
+                        </div>
+
+                        <!-- Manual Options -->
+                        <div id="compress-manual" class="hidden space-y-6 border-t border-gray-100 dark:border-slate-800 pt-6 animate-fade-in">
                             <div>
-                                <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-3">Kualitas Gambar (Estimasi Ukuran)</label>
+                                <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-3">Kualitas Gambar (%)</label>
                                 <div class="flex items-center gap-4">
-                                    <input type="range" id="comp-quality" min="0.1" max="1.0" step="0.1" value="0.7" class="w-full accent-primary h-2 bg-gray-100 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer" oninput="document.getElementById('qual-val').innerText = Math.round(this.value * 100) + '%'">
-                                    <span id="qual-val" class="font-bold text-primary w-12 text-right bg-primary/10 rounded px-2 py-1 text-xs">70%</span>
+                                    <input type="range" id="comp-quality" min="10" max="100" step="5" value="70" class="w-full accent-primary h-2 bg-gray-100 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer" oninput="document.getElementById('qual-val').innerText = this.value + '%'">
+                                    <span id="qual-val" class="font-bold text-primary w-14 text-right bg-primary/10 rounded px-2 py-1 text-xs">70%</span>
                                 </div>
                                 <div class="flex justify-between text-[10px] text-gray-400 dark:text-gray-500 mt-2 font-medium uppercase tracking-wide">
-                                    <span>Ukuran Kecil</span>
-                                    <span>Kualitas Tinggi</span>
+                                    <span>Rendah (Ukuran Kecil)</span>
+                                    <span>Tinggi (Ukuran Besar)</span>
                                 </div>
                             </div>
 
@@ -790,7 +802,7 @@ const app = {
                             
                             <div class="bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300 p-4 rounded-xl text-xs border border-amber-100 dark:border-amber-800/30 flex items-start">
                                 <i class="fa-solid fa-triangle-exclamation mr-3 text-sm mt-0.5"></i> 
-                                <span><b>Perhatian:</b> Mode Ekstrem akan mengubah halaman menjadi gambar (rasterize). Teks dalam PDF tidak akan bisa diblok/copy lagi.</span>
+                                <span><b>Perhatian:</b> Mode Manual akan mengubah halaman menjadi gambar (rasterize). Teks dalam PDF tidak akan bisa diblok/copy lagi.</span>
                             </div>
                         </div>
 
@@ -837,20 +849,22 @@ const app = {
     
     toggleCompressOptions: () => {
         const mode = document.querySelector('input[name="compressMode"]:checked').value;
-        const options = document.getElementById('compress-options');
+        const basicOpts = document.getElementById('compress-basic');
+        const manualOpts = document.getElementById('compress-manual');
         const autoOpts = document.getElementById('compress-auto');
         
-        if (mode === 'extreme') {
-             options.classList.remove('hidden');
-             // Re-label radio logic: wait, previously it was manual/auto radio.
-             // Now prompt says "basic", "manual", "auto" (target size).
-             // My controls.innerHTML only has basic and extreme. 
-             // Let me update controls to match the 3-option logic requested earlier to be safe.
-             // Actually, I will restore the 3-option radio group from previous turn to fully satisfy "ngatur DPI" and "atur ukuran file".
-             if(autoOpts) autoOpts.classList.add('hidden');
+        if (mode === 'basic') {
+            basicOpts.classList.remove('hidden');
+            manualOpts.classList.add('hidden');
+            autoOpts.classList.add('hidden');
+        } else if (mode === 'manual') {
+            basicOpts.classList.add('hidden');
+            manualOpts.classList.remove('hidden');
+            autoOpts.classList.add('hidden');
         } else {
-             options.classList.add('hidden');
-             if(autoOpts) autoOpts.classList.add('hidden');
+            basicOpts.classList.add('hidden');
+            manualOpts.classList.add('hidden');
+            autoOpts.classList.remove('hidden');
         }
     },
     
