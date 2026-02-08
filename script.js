@@ -42,7 +42,6 @@ const app = {
         { id: 'compress', title: 'Kompres PDF', icon: 'fa-compress', desc: 'Atur kualitas (KB/PPI) untuk memperkecil ukuran.', accept: '.pdf' },
         { id: 'compress-img', title: 'Kompres Gambar', icon: 'fa-image', desc: 'Kecilkan ukuran file JPG/PNG dengan mengatur kualitas.', accept: 'image/*' },
         { id: 'rotate', title: 'Putar PDF', icon: 'fa-rotate-right', desc: 'Putar halaman PDF 90°, 180°, atau 270°.', accept: '.pdf' },
-        { id: 'word-to-pdf', title: 'Word ke PDF', icon: 'fa-file-word', desc: 'Ubah dokumen Word (.docx) menjadi PDF.', accept: '.docx' },
         { id: 'img-to-pdf', title: 'JPG ke PDF', icon: 'fa-image', desc: 'Ubah gambar JPG/PNG menjadi file PDF.', accept: 'image/*' },
         { id: 'pdf-to-img', title: 'PDF ke JPG', icon: 'fa-file-image', desc: 'Ubah halaman PDF menjadi gambar.', accept: '.pdf' },
         { id: 'number', title: 'Nomor Halaman', icon: 'fa-list-ol', desc: 'Tambahkan penomoran halaman otomatis.', accept: '.pdf' },
@@ -130,10 +129,6 @@ const app = {
             uploadTitle.textContent = "Pilih Gambar JPG/PNG";
             uploadDesc.textContent = "Format PDF tidak diizinkan. Pilih gambar saja.";
             uploadIcon.className = "fa-solid fa-image";
-        } else if (toolId === 'word-to-pdf') {
-            uploadTitle.textContent = "Pilih File Word (.docx)";
-            uploadDesc.textContent = "Format .doc tidak didukung. Gunakan .docx.";
-            uploadIcon.className = "fa-solid fa-file-word";
         } else if (toolId === 'merge') {
             uploadTitle.textContent = "Pilih File (PDF/JPG/PNG)";
             uploadDesc.textContent = "Gabungkan berbagai format file sekaligus.";
@@ -637,14 +632,6 @@ const app = {
                     </div>
                 `;
                 break;
-            case 'word-to-pdf':
-                controls.innerHTML = `
-                    <div class="bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-300 p-4 rounded-xl text-xs border border-blue-100 dark:border-blue-800/30 flex items-start">
-                        <i class="fa-solid fa-info-circle mr-3 text-sm mt-0.5"></i> 
-                        <span>Konversi akan mempertahankan teks dan layout sederhana. Gambar dan tabel kompleks mungkin sedikit bergeser.</span>
-                    </div>
-                `;
-                break;
             case 'rotate':
                 controls.innerHTML = `
                     <p class="text-sm font-bold text-gray-700 dark:text-gray-300 mb-6 text-center">Pilih Arah Rotasi</p>
@@ -979,75 +966,6 @@ const app = {
                 }
                 resultBytes = await pdfDoc.save();
 
-            } else if (toolId === 'word-to-pdf') {
-                for (let i = 0; i < app.files.length; i++) {
-                    const file = app.files[i];
-                    
-                    // Important: Slice the buffer to avoid issues if it was transferred
-                    const arrayBuffer = file.buffer.slice(0);
-                    
-                    const options = {
-                        styleMap: [
-                            "p[style-name='Section Title'] => h1:fresh",
-                            "p[style-name='Subsection Title'] => h2:fresh"
-                        ]
-                    };
-
-                    try {
-                        const result = await mammoth.convertToHtml({ arrayBuffer: arrayBuffer }, options);
-                        const htmlContent = result.value;
-                        
-                        if (!htmlContent.trim()) {
-                            alert(`File ${file.name} tidak berisi teks yang dapat dibaca oleh sistem (mungkin berisi gambar scan/text box).`);
-                            continue;
-                        }
-
-                        // Create a container that is visible to the DOM engine but hidden from user
-                        const element = document.createElement('div');
-                        element.innerHTML = htmlContent;
-                        
-                        // Apply styling to mimic a document page
-                        Object.assign(element.style, {
-                            position: 'absolute',
-                            left: '-9999px',
-                            top: '0',
-                            width: '800px', // Standard A4 width approx (minus margins)
-                            fontFamily: 'Times New Roman, serif',
-                            fontSize: '12pt',
-                            lineHeight: '1.5',
-                            textAlign: 'justify',
-                            color: '#000000',
-                            backgroundColor: '#ffffff',
-                            padding: '20px'
-                        });
-
-                        document.body.appendChild(element);
-                        
-                        const originalName = file.name.replace(/\.[^/.]+$/, "");
-                        
-                        const opt = {
-                            margin:       10, // mm
-                            filename:     `${originalName}_convert.pdf`,
-                            image:        { type: 'jpeg', quality: 0.98 },
-                            html2canvas:  { scale: 2, useCORS: true, logging: false },
-                            jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
-                        };
-
-                        await html2pdf().set(opt).from(element).save();
-                        
-                        // Clean up
-                        document.body.removeChild(element);
-
-                    } catch (e) {
-                        console.error("Conversion error:", e);
-                        alert(`Gagal mengonversi ${file.name}. Pastikan file .docx tidak rusak.`);
-                    }
-
-                    if (i < app.files.length - 1) await new Promise(r => setTimeout(r, 1000));
-                }
-                app.resetButtonState();
-                return;
-
             } else if (toolId === 'pdf-to-img') {
                 const bufferCopy = app.files[0].buffer.slice(0);
                 const loadingTask = pdfjsLib.getDocument(new Uint8Array(bufferCopy));
@@ -1132,7 +1050,7 @@ const app = {
                             const context = canvas.getContext('2d');
                             canvas.height = viewport.height;
                             canvas.width = viewport.width;
-                            await page.render({ canvasContext: context, viewport: viewport }).promise;
+                            await page.render({canvasContext: context, viewport: viewport}).promise;
                             const imgDataUrl = canvas.toDataURL('image/jpeg', quality);
                             const img = await newPdf.embedJpg(imgDataUrl);
                             const pageDims = [viewport.width / scale, viewport.height / scale];
