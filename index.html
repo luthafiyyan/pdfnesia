@@ -57,6 +57,9 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <!-- JSZip for ZIP creation -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <!-- Editor Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body class="font-sans text-gray-700 bg-[#f8f9fc] dark:bg-slate-950 dark:text-gray-300 min-h-screen flex flex-col transition-colors duration-300">
 
@@ -245,6 +248,95 @@
                     <div class="loader loader-lg mb-4 border-t-primary"></div>
                     <p id="loading-text" class="text-gray-600 dark:text-gray-300 font-medium animate-pulse">Sedang memproses...</p>
                 </div>
+            </div>
+        </div>
+        
+        <!-- Editor View -->
+        <div id="view-editor" class="hidden fixed inset-0 z-50 bg-gray-100 dark:bg-slate-900 flex flex-col">
+            <!-- Editor Header -->
+            <div class="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 px-4 py-3 flex justify-between items-center shadow-sm z-20">
+                <div class="flex items-center gap-4">
+                    <button onclick="app.goHome()" class="text-gray-500 hover:text-primary transition flex items-center gap-2">
+                        <i class="fa-solid fa-arrow-left"></i>
+                        <span class="hidden sm:inline font-medium">Home</span>
+                    </button>
+                    <div class="h-6 w-px bg-gray-300 dark:bg-slate-600 mx-2"></div>
+                    <h2 class="text-lg font-bold text-gray-800 dark:text-white">Edit PDF</h2>
+                </div>
+                <button onclick="app.saveEditedPDF()" class="bg-primary hover:bg-primaryHover text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg shadow-blue-500/30 flex items-center gap-2 transition transform hover:scale-105">
+                    <i class="fa-solid fa-download"></i>
+                    <span>Download PDF</span>
+                </button>
+            </div>
+
+            <!-- Toolbar -->
+            <div class="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 px-4 py-2 flex items-center gap-4 overflow-x-auto no-scrollbar shadow-sm z-10">
+                <!-- Add Text -->
+                <button onclick="app.editor.addText()" class="p-2 rounded hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-600 dark:text-gray-300 flex flex-col items-center gap-1 min-w-[50px]" title="Add Text">
+                    <i class="fa-solid fa-font text-lg"></i>
+                    <span class="text-[10px]">Teks</span>
+                </button>
+                
+                <!-- Draw Mode -->
+                <button id="btn-draw" onclick="app.editor.toggleDraw()" class="p-2 rounded hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-600 dark:text-gray-300 flex flex-col items-center gap-1 min-w-[50px]" title="Free Draw">
+                    <i class="fa-solid fa-pen-nib text-lg"></i>
+                    <span class="text-[10px]">Gambar</span>
+                </button>
+
+                <!-- Rectangle -->
+                <button onclick="app.editor.addRect()" class="p-2 rounded hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-600 dark:text-gray-300 flex flex-col items-center gap-1 min-w-[50px]" title="Add Rectangle">
+                    <i class="fa-regular fa-square text-lg"></i>
+                    <span class="text-[10px]">Kotak</span>
+                </button>
+
+                <!-- Add Image -->
+                <div class="relative">
+                    <input type="file" id="editor-img-upload" class="hidden" accept="image/*" onchange="app.editor.addImage(this.files[0])">
+                    <button onclick="document.getElementById('editor-img-upload').click()" class="p-2 rounded hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-600 dark:text-gray-300 flex flex-col items-center gap-1 min-w-[50px]" title="Add Image">
+                        <i class="fa-regular fa-image text-lg"></i>
+                        <span class="text-[10px]">Img</span>
+                    </button>
+                </div>
+
+                <div class="h-8 w-px bg-gray-200 dark:bg-slate-600 mx-1"></div>
+
+                <!-- Color Picker -->
+                <div class="flex flex-col items-center gap-1">
+                    <input type="color" id="editor-color" value="#000000" onchange="app.editor.setColor(this.value)" class="w-8 h-6 rounded cursor-pointer border-none p-0">
+                    <span class="text-[10px] text-gray-500">Warna</span>
+                </div>
+
+                <div class="h-8 w-px bg-gray-200 dark:bg-slate-600 mx-1"></div>
+
+                <!-- Delete Object -->
+                <button onclick="app.editor.deleteObject()" class="p-2 rounded hover:bg-red-50 text-red-500 flex flex-col items-center gap-1 min-w-[50px]" title="Delete Selected">
+                    <i class="fa-solid fa-trash-can text-lg"></i>
+                    <span class="text-[10px]">Hapus</span>
+                </button>
+            </div>
+
+            <!-- Workspace Area -->
+            <div class="flex-grow bg-gray-100 dark:bg-slate-900 overflow-auto flex justify-center p-4 relative" id="editor-container">
+                <div class="relative shadow-lg">
+                    <canvas id="fabric-canvas"></canvas>
+                </div>
+            </div>
+
+            <!-- Pagination Footer -->
+            <div class="bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 px-4 py-3 flex justify-center items-center gap-4 z-20">
+                <button onclick="app.editor.prevPage()" class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-600 dark:text-gray-300 disabled:opacity-30" id="btn-prev-page">
+                    <i class="fa-solid fa-chevron-left"></i>
+                </button>
+                <span class="text-sm font-medium text-gray-700 dark:text-gray-200" id="page-indicator">Page 1 of 1</span>
+                <button onclick="app.editor.nextPage()" class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-600 dark:text-gray-300 disabled:opacity-30" id="btn-next-page">
+                    <i class="fa-solid fa-chevron-right"></i>
+                </button>
+            </div>
+            
+             <!-- Editor Loading Overlay -->
+            <div id="editor-loading" class="hidden absolute inset-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur z-50 flex flex-col items-center justify-center">
+                <div class="loader loader-lg mb-4 border-t-primary"></div>
+                <p class="text-gray-800 dark:text-white font-medium" id="editor-loading-text">Memproses...</p>
             </div>
         </div>
     </main>
