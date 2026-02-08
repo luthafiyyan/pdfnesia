@@ -34,9 +34,181 @@ const app = {
     pageThumbnails: [], 
     pageOrder: [], 
     dragPageStartIndex: null, 
+    
+    // Editor State
+    editor: {
+        pdfDoc: null,
+        canvas: null,
+        pageNum: 1,
+        pageCount: 0,
+        pageStates: {}, // Store JSON string of canvas per page
+        scale: 1.5, // Rendering scale
+        
+        init: async (fileBuffer) => {
+            // Show Editor UI
+            document.getElementById('view-home').classList.add('hidden');
+            document.getElementById('view-workspace').classList.add('hidden');
+            document.getElementById('view-editor').classList.remove('hidden');
+            
+            // Initialize PDF
+            const loadingTask = pdfjsLib.getDocument(new Uint8Array(fileBuffer));
+            app.editor.pdfDoc = await loadingTask.promise;
+            app.editor.pageCount = app.editor.pdfDoc.numPages;
+            app.editor.pageNum = 1;
+            app.editor.pageStates = {};
+
+            // Initialize Fabric Canvas
+            if (app.editor.canvas) {
+                app.editor.canvas.dispose();
+            }
+            app.editor.canvas = new fabric.Canvas('fabric-canvas', {
+                isDrawingMode: false
+            });
+            
+            // Set brush
+            app.editor.canvas.freeDrawingBrush = new fabric.PencilBrush(app.editor.canvas);
+            app.editor.canvas.freeDrawingBrush.width = 3;
+            app.editor.canvas.freeDrawingBrush.color = "#000000";
+
+            await app.editor.renderPage(1);
+        },
+
+        renderPage: async (num) => {
+            app.showEditorLoading(true);
+            
+            // Save current state if we are moving away
+            // (Assuming this is called when switching pages, state saving should be done before renderPage in prev/next logic if needed, 
+            // but here we just render)
+            
+            const page = await app.editor.pdfDoc.getPage(num);
+            const viewport = page.getViewport({ scale: app.editor.scale });
+            
+            // Resize canvas
+            app.editor.canvas.setWidth(viewport.width);
+            app.editor.canvas.setHeight(viewport.height);
+
+            // Render PDF page to canvas
+            const canvasEl = document.createElement('canvas');
+            const context = canvasEl.getContext('2d');
+            canvasEl.height = viewport.height;
+            canvasEl.width = viewport.width;
+
+            await page.render({ canvasContext: context, viewport: viewport }).promise;
+            
+            // Set background image
+            const bgDataUrl = canvasEl.toDataURL('image/jpeg');
+            
+            // Load saved state or clear
+            const savedState = app.editor.pageStates[num];
+            
+            if (savedState) {
+                 await new Promise(resolve => app.editor.canvas.loadFromJSON(savedState, resolve));
+            } else {
+                app.editor.canvas.clear();
+            }
+            
+            // Always set background (loadFromJSON might overwrite if not careful, but usually BG is separate in some logic. 
+            // Fabric loadFromJSON loads bg if saved. We want to ensure PDF bg is consistent)
+            fabric.Image.fromURL(bgDataUrl, (img) => {
+                app.editor.canvas.setBackgroundImage(img, app.editor.canvas.renderAll.bind(app.editor.canvas), {
+                    originX: 'left',
+                    originY: 'top'
+                });
+            });
+
+            // Update UI
+            document.getElementById('page-indicator').textContent = `Page ${num} of ${app.editor.pageCount}`;
+            document.getElementById('btn-prev-page').disabled = num <= 1;
+            document.getElementById('btn-next-page').disabled = num >= app.editor.pageCount;
+            
+            app.showEditorLoading(false);
+        },
+
+        saveCurrentState: () => {
+            // Serialize canvas objects (excluding background since we regenerate it from PDF)
+            // Actually, we can just save everything JSON. When reloading, we override background.
+            app.editor.pageStates[app.editor.pageNum] = JSON.stringify(app.editor.canvas.toJSON());
+        },
+
+        prevPage: async () => {
+            if (app.editor.pageNum <= 1) return;
+            app.editor.saveCurrentState();
+            app.editor.pageNum--;
+            await app.editor.renderPage(app.editor.pageNum);
+        },
+
+        nextPage: async () => {
+            if (app.editor.pageNum >= app.editor.pageCount) return;
+            app.editor.saveCurrentState();
+            app.editor.pageNum++;
+            await app.editor.renderPage(app.editor.pageNum);
+        },
+
+        // Tools
+        addText: () => {
+            const text = new fabric.IText('Teks Baru', {
+                left: 50, top: 50,
+                fontFamily: 'Helvetica',
+                fill: document.getElementById('editor-color').value,
+                fontSize: 20
+            });
+            app.editor.canvas.add(text);
+            app.editor.canvas.setActiveObject(text);
+            app.editor.canvas.isDrawingMode = false;
+        },
+
+        toggleDraw: () => {
+            app.editor.canvas.isDrawingMode = !app.editor.canvas.isDrawingMode;
+            const btn = document.getElementById('btn-draw');
+            if (app.editor.canvas.isDrawingMode) btn.classList.add('bg-blue-100', 'text-primary');
+            else btn.classList.remove('bg-blue-100', 'text-primary');
+        },
+
+        addRect: () => {
+            const rect = new fabric.Rect({
+                left: 100, top: 100,
+                width: 100, height: 50,
+                fill: 'transparent',
+                stroke: document.getElementById('editor-color').value,
+                strokeWidth: 3
+            });
+            app.editor.canvas.add(rect);
+            app.editor.canvas.isDrawingMode = false;
+        },
+
+        addImage: (file) => {
+            if(!file) return;
+            const reader = new FileReader();
+            reader.onload = (f) => {
+                fabric.Image.fromURL(f.target.result, (img) => {
+                    img.scaleToWidth(150);
+                    app.editor.canvas.add(img);
+                    app.editor.canvas.setActiveObject(img);
+                });
+            };
+            reader.readAsDataURL(file);
+            app.editor.canvas.isDrawingMode = false;
+        },
+
+        deleteObject: () => {
+            const active = app.editor.canvas.getActiveObject();
+            if (active) app.editor.canvas.remove(active);
+        },
+
+        setColor: (color) => {
+            app.editor.canvas.freeDrawingBrush.color = color;
+            const active = app.editor.canvas.getActiveObject();
+            if (active) {
+                if (active.type === 'i-text') active.set('fill', color);
+                else if (active.type === 'rect') active.set('stroke', color);
+                app.editor.canvas.requestRenderAll();
+            }
+        }
+    },
 
     tools: [
         { id: 'merge', title: 'Gabung PDF & Gambar', icon: 'fa-layer-group', desc: 'Satukan file PDF, JPG, dan PNG menjadi satu dokumen PDF.', accept: '.pdf,image/jpeg,image/png' },
+        { id: 'edit-pdf', title: 'Edit PDF', icon: 'fa-pen-to-square', desc: 'Tambah teks, tanda tangan, dan gambar ke PDF.', accept: '.pdf' },
         { id: 'reorder', title: 'Urutkan PDF', icon: 'fa-sort', desc: 'Atur ulang urutan halaman PDF dengan drag & drop.', accept: '.pdf' },
         { id: 'split', title: 'Pisah PDF', icon: 'fa-scissors', desc: 'Pilih halaman yang ingin dibuang/dipisahkan dari dokumen.', accept: '.pdf' },
         { id: 'compress', title: 'Kompres PDF', icon: 'fa-compress', desc: 'Atur kualitas (KB/PPI) untuk memperkecil ukuran.', accept: '.pdf' },
@@ -88,6 +260,7 @@ const app = {
         document.getElementById('view-privacy').classList.add('hidden');
         document.getElementById('view-about').classList.add('hidden');
         document.getElementById('view-workspace').classList.add('hidden');
+        document.getElementById('view-editor').classList.add('hidden');
         app.resetWorkspace();
     },
 
@@ -95,6 +268,7 @@ const app = {
         document.getElementById('view-home').classList.add('hidden');
         document.getElementById('view-workspace').classList.add('hidden');
         document.getElementById('view-about').classList.add('hidden');
+        document.getElementById('view-editor').classList.add('hidden');
         document.getElementById('view-privacy').classList.remove('hidden');
         window.scrollTo(0, 0);
     },
@@ -103,16 +277,33 @@ const app = {
         document.getElementById('view-home').classList.add('hidden');
         document.getElementById('view-workspace').classList.add('hidden');
         document.getElementById('view-privacy').classList.add('hidden');
+        document.getElementById('view-editor').classList.add('hidden');
         document.getElementById('view-about').classList.remove('hidden');
         window.scrollTo(0, 0);
     },
 
     openTool: (toolId) => {
         app.currentTool = app.tools.find(t => t.id === toolId);
+        
+        // Handling for Edit PDF (special view)
+        if (toolId === 'edit-pdf') {
+             // Just set title and trigger upload directly usually, but logic is uniform
+             // We'll catch file upload and redirect to editor.init
+        }
+
         document.getElementById('view-home').classList.add('hidden');
         document.getElementById('view-privacy').classList.add('hidden');
         document.getElementById('view-about').classList.add('hidden');
-        document.getElementById('view-workspace').classList.remove('hidden');
+        document.getElementById('view-editor').classList.add('hidden');
+        
+        // Show Standard Workspace
+        if (toolId !== 'edit-pdf') {
+             document.getElementById('view-workspace').classList.remove('hidden');
+        } else {
+             // For edit pdf, we stay hidden until file picked or show a specific intro?
+             // Reusing workspace for upload step is fine.
+             document.getElementById('view-workspace').classList.remove('hidden');
+        }
         
         document.getElementById('tool-title').textContent = app.currentTool.title;
         const uploadTitle = document.getElementById('upload-title');
@@ -154,6 +345,9 @@ const app = {
         }
     },
 
+    // ... (renderHome, resetWorkspace, etc. remain the same) ...
+    // NOTE: I am reusing existing code where possible. I just paste the changed parts for clarity.
+    
     renderHome: () => {
         const container = document.getElementById('features');
         container.innerHTML = app.tools.map(tool => `
@@ -202,7 +396,7 @@ const app = {
         
         app.processedPdfBytes = null;
     },
-
+    
     setDownloadButtonState: () => {
         const btn = document.getElementById('btn-process');
         const btnText = document.getElementById('btn-text');
@@ -229,9 +423,101 @@ const app = {
         btnLoader.classList.remove('hidden');
         btnIcon.classList.add('hidden');
     },
+    
+    showEditorLoading: (isLoading, text="Memproses...") => {
+        const el = document.getElementById('editor-loading');
+        if(isLoading) {
+            document.getElementById('editor-loading-text').innerText = text;
+            el.classList.remove('hidden');
+        } else {
+            el.classList.add('hidden');
+        }
+    },
+    
+    saveEditedPDF: async () => {
+        app.showEditorLoading(true, "Menyimpan PDF...");
+        
+        // Save current page first
+        app.editor.saveCurrentState();
+        
+        try {
+            const { jsPDF } = window.jspdf;
+            
+            // Loop through all pages to generate final PDF
+            // Using first page to init doc
+            const pdf = new jsPDF();
+            
+            for (let i = 1; i <= app.editor.pageCount; i++) {
+                if (i > 1) pdf.addPage();
+                
+                // We need to render each page canvas again to get the final image
+                // 1. Get viewport size
+                const page = await app.editor.pdfDoc.getPage(i);
+                const viewport = page.getViewport({ scale: app.editor.scale });
+                
+                // 2. Render PDF background to canvas
+                const canvasEl = document.createElement('canvas');
+                const context = canvasEl.getContext('2d');
+                canvasEl.height = viewport.height;
+                canvasEl.width = viewport.width;
+                await page.render({ canvasContext: context, viewport: viewport }).promise;
+                const bgDataUrl = canvasEl.toDataURL('image/jpeg');
+                
+                // 3. Setup a temporary fabric canvas to combine background + edits
+                const tempCanvas = new fabric.StaticCanvas(null, { width: viewport.width, height: viewport.height });
+                
+                // Set background
+                await new Promise(resolve => {
+                    fabric.Image.fromURL(bgDataUrl, (img) => {
+                        tempCanvas.setBackgroundImage(img, resolve, { originX: 'left', originY: 'top' });
+                    });
+                });
+                
+                // Load edits if any
+                const savedState = app.editor.pageStates[i];
+                if (savedState) {
+                    await new Promise(resolve => tempCanvas.loadFromJSON(savedState, resolve));
+                }
+                
+                // Export to image
+                const finalImg = tempCanvas.toDataURL({ format: 'jpeg', quality: 0.9 });
+                
+                // Add to jsPDF
+                // jsPDF usually works in mm. We need to convert pixel dimensions to PDF dimensions or just fit
+                const imgProps = pdf.getImageProperties(finalImg);
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+                
+                pdf.addImage(finalImg, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+                
+                // Clean
+                tempCanvas.dispose();
+            }
+            
+            pdf.save('PDFnesia_Edited.pdf');
+            
+        } catch (e) {
+            console.error(e);
+            alert("Gagal menyimpan PDF. Coba lagi.");
+        }
+        
+        app.showEditorLoading(false);
+    },
 
     handleFileUpload: async (fileList) => {
         if (fileList.length === 0) return;
+        
+        if (app.currentTool.id === 'edit-pdf') {
+            const file = fileList[0];
+            if(file.type !== 'application/pdf'){
+                alert("Mohon upload file PDF.");
+                return;
+            }
+            const buffer = await file.arrayBuffer();
+            app.editor.init(buffer);
+            return;
+        }
+
         app.showLoading(true, "Membaca file...");
         
         const isAppend = (app.currentTool && app.currentTool.id === 'merge') && app.files.length > 0;
@@ -394,14 +680,11 @@ const app = {
                 card.addEventListener('dragstart', app.dragPageStart);
                 card.addEventListener('dragover', app.dragPageOver);
                 card.addEventListener('drop', app.dragPageDrop);
-            } else if (app.currentTool.id === 'delete' || app.currentTool.id === 'split') {
+            } else {
                 // Delete or Split Mode
                 card.className = "page-thumb-card bg-white dark:bg-slate-800 p-2 rounded relative border border-gray-200 dark:border-slate-700";
                 if (app.pagesToDelete.has(originalIndex)) card.classList.add('to-delete');
                 card.onclick = () => app.toggleDeletePage(originalIndex);
-            } else {
-                 // Default view (e.g., pdf-to-img) - Just display
-                 card.className = "bg-white dark:bg-slate-800 p-2 rounded relative border border-gray-200 dark:border-slate-700 shadow-sm";
             }
 
             const img = document.createElement('img');
@@ -1050,7 +1333,7 @@ const app = {
                             const context = canvas.getContext('2d');
                             canvas.height = viewport.height;
                             canvas.width = viewport.width;
-                            await page.render({canvasContext: context, viewport: viewport}).promise;
+                            await page.render({ canvasContext: context, viewport: viewport }).promise;
                             const imgDataUrl = canvas.toDataURL('image/jpeg', quality);
                             const img = await newPdf.embedJpg(imgDataUrl);
                             const pageDims = [viewport.width / scale, viewport.height / scale];
