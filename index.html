@@ -251,86 +251,188 @@
             </div>
         </div>
         
-        <!-- Editor View -->
+        <!-- Editor View (Updated Layout) -->
         <div id="view-editor" class="hidden fixed inset-0 z-50 bg-gray-100 dark:bg-slate-900 flex flex-col">
-            <!-- Editor Header -->
-            <div class="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 px-4 py-3 flex justify-between items-center shadow-sm z-20">
-                <div class="flex items-center gap-4">
-                    <button onclick="app.goHome()" class="text-gray-500 hover:text-primary transition flex items-center gap-2">
+            <!-- 1. Editor Header -->
+            <div class="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 px-4 py-3 flex justify-between items-center shadow-sm z-30">
+                <div class="flex items-center gap-3 md:gap-4">
+                    <button onclick="app.goHome()" class="text-gray-500 dark:text-gray-400 hover:text-primary transition flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-slate-700">
                         <i class="fa-solid fa-arrow-left"></i>
                         <span class="hidden sm:inline font-medium">Home</span>
                     </button>
-                    <div class="h-6 w-px bg-gray-300 dark:bg-slate-600 mx-2"></div>
-                    <h2 class="text-lg font-bold text-gray-800 dark:text-white">Edit PDF</h2>
+                    <div class="h-6 w-px bg-gray-300 dark:bg-slate-600 hidden sm:block"></div>
+                    <div class="flex items-center gap-2">
+                        <h2 class="text-base md:text-lg font-bold text-gray-800 dark:text-white">Editor PDF</h2>
+                        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 hidden sm:inline-block">BETA</span>
+                    </div>
                 </div>
-                <button onclick="app.saveEditedPDF()" class="bg-primary hover:bg-primaryHover text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg shadow-blue-500/30 flex items-center gap-2 transition transform hover:scale-105">
-                    <i class="fa-solid fa-download"></i>
-                    <span>Download PDF</span>
-                </button>
+                
+                <div class="flex items-center gap-3">
+                    <!-- Zoom Controls in Header -->
+                     <div class="hidden md:flex items-center bg-gray-100 dark:bg-slate-700 rounded-lg px-2 py-1">
+                        <button onclick="app.editor.changeZoom(-0.1)" class="p-1 text-gray-500 hover:text-primary"><i class="fa-solid fa-minus"></i></button>
+                        <span id="zoom-level" class="text-xs font-mono w-12 text-center text-gray-700 dark:text-gray-300">100%</span>
+                        <button onclick="app.editor.changeZoom(0.1)" class="p-1 text-gray-500 hover:text-primary"><i class="fa-solid fa-plus"></i></button>
+                     </div>
+
+                    <button onclick="app.saveEditedPDF()" class="bg-primary hover:bg-primaryHover text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg shadow-blue-500/30 flex items-center gap-2 transition transform hover:-translate-y-0.5">
+                        <i class="fa-solid fa-download"></i>
+                        <span class="hidden sm:inline">Simpan PDF</span>
+                    </button>
+                </div>
             </div>
 
-            <!-- Toolbar -->
-            <div class="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 px-4 py-2 flex items-center gap-4 overflow-x-auto no-scrollbar shadow-sm z-10">
-                <!-- Add Text -->
-                <button onclick="app.editor.addText()" class="p-2 rounded hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-600 dark:text-gray-300 flex flex-col items-center gap-1 min-w-[50px]" title="Add Text">
-                    <i class="fa-solid fa-font text-lg"></i>
-                    <span class="text-[10px]">Teks</span>
-                </button>
+            <!-- 2. Editor Toolbar (Revised & Sweet) -->
+            <div class="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 px-2 py-2 flex items-center gap-2 overflow-x-auto no-scrollbar shadow-sm z-20 justify-start md:justify-center">
                 
-                <!-- Draw Mode -->
-                <button id="btn-draw" onclick="app.editor.toggleDraw()" class="p-2 rounded hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-600 dark:text-gray-300 flex flex-col items-center gap-1 min-w-[50px]" title="Free Draw">
-                    <i class="fa-solid fa-pen-nib text-lg"></i>
-                    <span class="text-[10px]">Gambar</span>
-                </button>
-
-                <!-- Rectangle -->
-                <button onclick="app.editor.addRect()" class="p-2 rounded hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-600 dark:text-gray-300 flex flex-col items-center gap-1 min-w-[50px]" title="Add Rectangle">
-                    <i class="fa-regular fa-square text-lg"></i>
-                    <span class="text-[10px]">Kotak</span>
-                </button>
-
-                <!-- Add Image -->
-                <div class="relative">
-                    <input type="file" id="editor-img-upload" class="hidden" accept="image/*" onchange="app.editor.addImage(this.files[0])">
-                    <button onclick="document.getElementById('editor-img-upload').click()" class="p-2 rounded hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-600 dark:text-gray-300 flex flex-col items-center gap-1 min-w-[50px]" title="Add Image">
-                        <i class="fa-regular fa-image text-lg"></i>
-                        <span class="text-[10px]">Img</span>
+                <!-- History Group -->
+                <div class="flex items-center gap-1 pr-2 border-r border-gray-200 dark:border-slate-600">
+                    <button onclick="app.editor.undo()" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-600 dark:text-gray-300 transition" title="Undo">
+                        <i class="fa-solid fa-rotate-left"></i>
+                    </button>
+                    <button onclick="app.editor.redo()" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-600 dark:text-gray-300 transition" title="Redo">
+                        <i class="fa-solid fa-rotate-right"></i>
                     </button>
                 </div>
 
-                <div class="h-8 w-px bg-gray-200 dark:bg-slate-600 mx-1"></div>
-
-                <!-- Color Picker -->
-                <div class="flex flex-col items-center gap-1">
-                    <input type="color" id="editor-color" value="#000000" onchange="app.editor.setColor(this.value)" class="w-8 h-6 rounded cursor-pointer border-none p-0">
-                    <span class="text-[10px] text-gray-500">Warna</span>
+                <!-- Text Tools -->
+                <div class="flex items-center gap-2 px-2 border-r border-gray-200 dark:border-slate-600">
+                    <button onclick="app.editor.addText()" class="flex flex-col items-center justify-center p-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/30 text-gray-600 dark:text-gray-300 hover:text-primary transition min-w-[3rem]" title="Add Text">
+                        <i class="fa-solid fa-font text-lg mb-0.5"></i>
+                        <span class="text-[9px] font-medium">Teks</span>
+                    </button>
+                    
+                    <div class="flex flex-col gap-1 w-24">
+                        <select id="editor-font-family" onchange="app.editor.setFontFamily(this.value)" class="text-[10px] p-1 rounded border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-700 dark:text-gray-200 focus:outline-none focus:border-primary">
+                            <option value="Helvetica">Helvetica</option>
+                            <option value="Times New Roman">Times New Roman</option>
+                            <option value="Courier New">Courier</option>
+                        </select>
+                        <div class="flex items-center gap-1">
+                            <i class="fa-solid fa-text-height text-[10px] text-gray-400"></i>
+                            <input type="number" id="editor-font-size" value="20" min="8" max="72" onchange="app.editor.setFontSize(this.value)" class="w-full text-[10px] p-0.5 rounded border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-700 dark:text-gray-200 text-center focus:outline-none focus:border-primary">
+                        </div>
+                    </div>
                 </div>
 
-                <div class="h-8 w-px bg-gray-200 dark:bg-slate-600 mx-1"></div>
+                <!-- Annotation Tools -->
+                <div class="flex items-center gap-2 px-2 border-r border-gray-200 dark:border-slate-600">
+                    <button id="btn-draw" onclick="app.editor.toggleDraw()" class="flex flex-col items-center justify-center p-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/30 text-gray-600 dark:text-gray-300 hover:text-primary transition min-w-[3rem]" title="Free Draw">
+                        <i class="fa-solid fa-pen-nib text-lg mb-0.5"></i>
+                        <span class="text-[9px] font-medium">Gambar</span>
+                    </button>
+                    <button onclick="app.editor.toggleHighlighter()" id="btn-highlight" class="flex flex-col items-center justify-center p-2 rounded-lg hover:bg-yellow-50 dark:hover:bg-yellow-900/30 text-gray-600 dark:text-gray-300 hover:text-yellow-600 transition min-w-[3rem]" title="Highlighter">
+                        <i class="fa-solid fa-highlighter text-lg mb-0.5"></i>
+                        <span class="text-[9px] font-medium">Stabilo</span>
+                    </button>
+                    <button onclick="app.editor.addRect()" class="flex flex-col items-center justify-center p-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/30 text-gray-600 dark:text-gray-300 hover:text-primary transition min-w-[3rem]" title="Add Rectangle">
+                        <i class="fa-regular fa-square text-lg mb-0.5"></i>
+                        <span class="text-[9px] font-medium">Kotak</span>
+                    </button>
+                    
+                    <div class="flex flex-col items-center gap-1 ml-1">
+                        <input type="color" id="editor-color" value="#000000" onchange="app.editor.setColor(this.value)" class="w-8 h-8 rounded-full cursor-pointer border-2 border-gray-200 dark:border-slate-600 p-0 overflow-hidden shadow-sm">
+                    </div>
+                </div>
 
-                <!-- Delete Object -->
-                <button onclick="app.editor.deleteObject()" class="p-2 rounded hover:bg-red-50 text-red-500 flex flex-col items-center gap-1 min-w-[50px]" title="Delete Selected">
-                    <i class="fa-solid fa-trash-can text-lg"></i>
-                    <span class="text-[10px]">Hapus</span>
-                </button>
-            </div>
+                <!-- Insert Tools -->
+                <div class="flex items-center gap-2 px-2">
+                    <div class="relative">
+                         <input type="file" id="editor-insert-file" class="hidden" accept=".pdf,image/jpeg,image/png" onchange="app.editor.addExternalFile(this.files[0])">
+                        <button onclick="document.getElementById('editor-insert-file').click()" class="flex flex-col items-center justify-center p-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/30 text-gray-600 dark:text-gray-300 hover:text-primary transition min-w-[3rem]" title="Add Image/PDF">
+                            <i class="fa-solid fa-file-circle-plus text-lg mb-0.5"></i>
+                            <span class="text-[9px] font-medium">Add File</span>
+                        </button>
+                    </div>
+                    
+                    <button onclick="app.editor.openSignatureModal()" class="flex flex-col items-center justify-center p-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/30 text-gray-600 dark:text-gray-300 hover:text-primary transition min-w-[3rem]" title="Add Signature">
+                        <i class="fa-solid fa-file-signature text-lg mb-0.5"></i>
+                        <span class="text-[9px] font-medium">Sign</span>
+                    </button>
 
-            <!-- Workspace Area -->
-            <div class="flex-grow bg-gray-100 dark:bg-slate-900 overflow-auto flex justify-center p-4 relative" id="editor-container">
-                <div class="relative shadow-lg">
-                    <canvas id="fabric-canvas"></canvas>
+                    <div class="w-px h-8 bg-gray-200 dark:bg-slate-600 mx-1"></div>
+
+                    <button onclick="app.editor.deleteObject()" class="flex flex-col items-center justify-center p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 hover:text-red-600 transition min-w-[3rem]" title="Delete Selected">
+                        <i class="fa-solid fa-trash-can text-lg mb-0.5"></i>
+                        <span class="text-[9px] font-medium">Hapus</span>
+                    </button>
                 </div>
             </div>
 
-            <!-- Pagination Footer -->
-            <div class="bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 px-4 py-3 flex justify-center items-center gap-4 z-20">
-                <button onclick="app.editor.prevPage()" class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-600 dark:text-gray-300 disabled:opacity-30" id="btn-prev-page">
-                    <i class="fa-solid fa-chevron-left"></i>
-                </button>
-                <span class="text-sm font-medium text-gray-700 dark:text-gray-200" id="page-indicator">Page 1 of 1</span>
-                <button onclick="app.editor.nextPage()" class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-600 dark:text-gray-300 disabled:opacity-30" id="btn-next-page">
-                    <i class="fa-solid fa-chevron-right"></i>
-                </button>
+            <!-- 3. Main Editor Layout (Split Pane) -->
+            <div class="flex-grow flex overflow-hidden relative">
+                
+                <!-- Left/Center: Canvas Workspace -->
+                <div id="editor-main-area" class="flex-grow bg-gray-100 dark:bg-slate-950 overflow-auto flex justify-center p-4 relative md:p-8">
+                    <div class="relative shadow-2xl transition-transform duration-200 ease-out origin-top" id="canvas-wrapper">
+                        <canvas id="fabric-canvas"></canvas>
+                    </div>
+                </div>
+
+                <!-- Right: Pages Sidebar -->
+                <div id="editor-sidebar" class="w-56 bg-white dark:bg-slate-900 border-l border-gray-200 dark:border-slate-700 flex-shrink-0 hidden md:flex flex-col z-10 shadow-lg">
+                    <div class="p-3 border-b border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800/50">
+                        <h3 class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Halaman</h3>
+                    </div>
+                    <div id="editor-page-list" class="flex-grow overflow-y-auto p-3 space-y-3">
+                        <!-- Thumbnails will be injected here via JS -->
+                        <div class="text-center text-xs text-gray-400 mt-4">Memuat halaman...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer Pagination (Visible on Mobile) -->
+            <div class="bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 px-4 py-3 flex justify-between items-center gap-4 z-20 md:hidden">
+                 <div class="flex items-center gap-2">
+                    <button onclick="app.editor.changeZoom(-0.1)" class="p-2 rounded bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300"><i class="fa-solid fa-minus"></i></button>
+                    <span id="zoom-level-mobile" class="text-xs font-mono w-10 text-center">100%</span>
+                    <button onclick="app.editor.changeZoom(0.1)" class="p-2 rounded bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300"><i class="fa-solid fa-plus"></i></button>
+                 </div>
+                 <div class="flex items-center gap-2">
+                    <button onclick="app.editor.prevPage()" class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-600 dark:text-gray-300 disabled:opacity-30" id="btn-prev-page">
+                        <i class="fa-solid fa-chevron-left"></i>
+                    </button>
+                    <span class="text-sm font-medium text-gray-700 dark:text-gray-200" id="page-indicator">1 / 1</span>
+                    <button onclick="app.editor.nextPage()" class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-600 dark:text-gray-300 disabled:opacity-30" id="btn-next-page">
+                        <i class="fa-solid fa-chevron-right"></i>
+                    </button>
+                 </div>
+            </div>
+            
+            <!-- Signature Modal -->
+            <div id="signature-modal" class="hidden fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+                <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-fade-in">
+                    <div class="px-6 py-4 border-b border-gray-100 dark:border-slate-800 flex justify-between items-center">
+                        <h3 class="font-bold text-gray-800 dark:text-white">Buat Tanda Tangan</h3>
+                        <button onclick="app.editor.closeSignatureModal()" class="text-gray-400 hover:text-red-500 transition"><i class="fa-solid fa-times"></i></button>
+                    </div>
+                    <div class="p-6">
+                        <div class="mb-4">
+                            <div class="flex gap-2 mb-2 bg-gray-100 dark:bg-slate-800 p-1 rounded-lg">
+                                <button onclick="app.editor.switchSigTab('draw')" id="tab-draw" class="flex-1 py-1.5 text-xs font-bold rounded-md bg-white dark:bg-slate-700 shadow-sm text-primary transition">Gambar</button>
+                                <button onclick="app.editor.switchSigTab('upload')" id="tab-upload" class="flex-1 py-1.5 text-xs font-bold rounded-md text-gray-500 hover:text-gray-700 dark:text-gray-400 transition">Upload</button>
+                            </div>
+                            
+                            <!-- Draw Pad -->
+                            <div id="sig-pad-container" class="border-2 border-dashed border-gray-200 dark:border-slate-700 rounded-xl bg-white touch-none h-48 relative">
+                                <canvas id="signature-pad" class="w-full h-full cursor-crosshair"></canvas>
+                                <div class="absolute bottom-2 right-2">
+                                     <button onclick="app.editor.clearSignature()" class="text-xs text-red-500 hover:bg-red-50 px-2 py-1 rounded border border-red-200 transition">Hapus</button>
+                                </div>
+                            </div>
+
+                            <!-- Upload Area (Hidden by default) -->
+                            <div id="sig-upload-container" class="hidden border-2 border-dashed border-gray-200 dark:border-slate-700 rounded-xl bg-gray-50 dark:bg-slate-800 h-48 flex flex-col items-center justify-center cursor-pointer hover:border-primary/50 transition" onclick="document.getElementById('sig-file-input').click()">
+                                <i class="fa-solid fa-cloud-arrow-up text-3xl text-gray-400 mb-2"></i>
+                                <span class="text-xs text-gray-500">Klik untuk upload gambar tanda tangan</span>
+                                <input type="file" id="sig-file-input" class="hidden" accept="image/png, image/jpeg" onchange="app.editor.handleSigUpload(this.files[0])">
+                            </div>
+                        </div>
+                        <button onclick="app.editor.addSignatureToPDF()" class="w-full py-3 bg-primary text-white rounded-xl font-bold hover:bg-primaryHover transition shadow-lg shadow-blue-500/30">
+                            Tambahkan ke PDF
+                        </button>
+                    </div>
+                </div>
             </div>
             
              <!-- Editor Loading Overlay -->
