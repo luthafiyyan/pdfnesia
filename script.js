@@ -30,10 +30,11 @@ const app = {
     files: [], 
     processedPdfBytes: null,
     dragStartIndex: null, 
-    pagesToDelete: new Set(), 
+    pagesToDelete: new Set(), // Reused as 'selectedPages' for rotate tool
     pageThumbnails: [], 
     pageOrder: [], 
     dragPageStartIndex: null, 
+    pageRotations: [], // Stores current rotation angle (0, 90, 180, 270) for each page
 
     tools: [
         { id: 'merge', title: 'Gabung PDF & Gambar', icon: 'fa-layer-group', desc: 'Satukan file PDF, JPG, dan PNG menjadi satu dokumen PDF.', accept: '.pdf,image/jpeg,image/png' },
@@ -146,7 +147,6 @@ const app = {
     },
 
     triggerUpload: () => {
-        // Use imgInput only for strict image tools, otherwise use dynamic fileInput
         if (app.currentTool && (app.currentTool.id === 'img-to-pdf' || app.currentTool.id === 'compress-img')) {
             document.getElementById('imgInput').click();
         } else {
@@ -176,6 +176,7 @@ const app = {
         app.pageOrder = [];
         app.processedPdfBytes = null;
         app.pagesToDelete.clear();
+        app.pageRotations = [];
         
         document.getElementById('fileInput').value = '';
         document.getElementById('imgInput').value = '';
@@ -242,8 +243,8 @@ const app = {
             app.files.push({ name: file.name, buffer: buffer, type: file.type, thumbnail: null });
         }
 
-        // Generate thumbnails for Delete, Reorder, Split AND PDF-to-JPG
-        if (['delete', 'reorder', 'split', 'pdf-to-img'].includes(app.currentTool.id)) {
+        // Generate thumbnails for Delete, Reorder, Split, PDF-to-JPG, AND Rotate
+        if (['delete', 'reorder', 'split', 'pdf-to-img', 'rotate'].includes(app.currentTool.id)) {
             if (app.files.length > 0) await app.generatePageThumbnails();
         }
 
@@ -258,6 +259,7 @@ const app = {
         const file = app.files[0];
         app.pageThumbnails = [];
         app.pageOrder = [];
+        app.pageRotations = [];
         
         try {
             app.showLoading(true, "Memuat halaman PDF...");
@@ -265,6 +267,8 @@ const app = {
             const loadingTask = pdfjsLib.getDocument(new Uint8Array(bufferCopy));
             const pdf = await loadingTask.promise;
             
+            app.pageRotations = new Array(pdf.numPages).fill(0); // Init rotations
+
             for (let i = 1; i <= pdf.numPages; i++) {
                 const page = await pdf.getPage(i);
                 const viewport = page.getViewport({ scale: 0.3 }); 
@@ -335,31 +339,51 @@ const app = {
         else app.renderProcessUI();
     },
     
-    resetRotation: () => {
-        const radios = document.querySelectorAll('input[name="rotation"]');
-        radios.forEach(r => r.checked = false);
-        const images = document.querySelectorAll('.preview-img');
-        images.forEach(img => { img.style.transform = 'rotate(0deg)'; });
-        app.resetButtonState();
-    },
-
-    updatePreviewRotation: () => {
-        const rotInput = document.querySelector('input[name="rotation"]:checked');
-        if(!rotInput) return;
-        const deg = parseInt(rotInput.value);
-        const images = document.querySelectorAll('.preview-img');
-        images.forEach(img => { img.style.transform = `rotate(${deg}deg)`; });
-    },
-
-    toggleDeletePage: (index) => {
-        const card = document.getElementById(`page-card-${index}`);
+    // --- Rotate Specific Logic ---
+    togglePageSelection: (index) => {
         if (app.pagesToDelete.has(index)) {
             app.pagesToDelete.delete(index);
-            card.classList.remove('to-delete');
         } else {
             app.pagesToDelete.add(index);
-            card.classList.add('to-delete');
         }
+        
+        const card = document.getElementById(`page-card-${index}`);
+        if(card) {
+            if(app.pagesToDelete.has(index)) {
+                if(app.currentTool.id === 'rotate') card.classList.add('selected');
+                else card.classList.add('to-delete');
+            } else {
+                card.classList.remove('selected', 'to-delete');
+            }
+        }
+    },
+    
+    selectAllPages: () => {
+        app.pageThumbnails.forEach((_, idx) => app.pagesToDelete.add(idx));
+        app.renderPageGrid();
+    },
+    
+    resetSelection: () => {
+        app.pagesToDelete.clear();
+        app.renderPageGrid();
+    },
+    
+    rotateSelectedPages: (angle) => {
+        if(app.pagesToDelete.size === 0) return alert("Pilih halaman yang ingin diputar terlebih dahulu.");
+        
+        app.pagesToDelete.forEach(idx => {
+            // Normalize angle to 0-360
+            let newAngle = (app.pageRotations[idx] + angle) % 360;
+            if (newAngle < 0) newAngle += 360;
+            app.pageRotations[idx] = newAngle;
+            
+            // Update visual
+            const card = document.getElementById(`page-card-${idx}`);
+            if(card) {
+                const img = card.querySelector('img');
+                if(img) img.style.transform = `rotate(${newAngle}deg)`;
+            }
+        });
     },
 
     syncDeleteRange: (val) => {
@@ -381,6 +405,7 @@ const app = {
         const grid = document.getElementById('page-grid-container');
         grid.innerHTML = '';
         const isReorder = app.currentTool.id === 'reorder';
+        const isRotate = app.currentTool.id === 'rotate';
         const displayOrder = isReorder ? app.pageOrder : Array.from({length: app.pageThumbnails.length}, (_, i) => i);
 
         displayOrder.forEach((originalIndex, displayIndex) => {
@@ -394,11 +419,15 @@ const app = {
                 card.addEventListener('dragstart', app.dragPageStart);
                 card.addEventListener('dragover', app.dragPageOver);
                 card.addEventListener('drop', app.dragPageDrop);
-            } else if (app.currentTool.id === 'delete' || app.currentTool.id === 'split') {
-                // Delete or Split Mode
+            } else if (['delete', 'split', 'rotate'].includes(app.currentTool.id)) {
+                // Interactive Mode
                 card.className = "page-thumb-card bg-white dark:bg-slate-800 p-2 rounded relative border border-gray-200 dark:border-slate-700";
-                if (app.pagesToDelete.has(originalIndex)) card.classList.add('to-delete');
-                card.onclick = () => app.toggleDeletePage(originalIndex);
+                
+                if (app.pagesToDelete.has(originalIndex)) {
+                     if(isRotate) card.classList.add('selected');
+                     else card.classList.add('to-delete');
+                }
+                card.onclick = () => app.togglePageSelection(originalIndex);
             } else {
                  // Default view (e.g., pdf-to-img) - Just display
                  card.className = "bg-white dark:bg-slate-800 p-2 rounded relative border border-gray-200 dark:border-slate-700 shadow-sm";
@@ -407,6 +436,11 @@ const app = {
             const img = document.createElement('img');
             img.src = app.pageThumbnails[originalIndex];
             img.className = "w-full h-auto rounded border border-gray-100 dark:border-slate-600 shadow-sm pointer-events-none";
+            
+            // Apply current rotation for rotate tool visual
+            if (isRotate && app.pageRotations[originalIndex]) {
+                 img.style.transform = `rotate(${app.pageRotations[originalIndex]}deg)`;
+            }
 
             const label = document.createElement('div');
             label.className = "text-center text-xs font-bold mt-2 text-gray-600 dark:text-gray-300";
@@ -434,8 +468,7 @@ const app = {
         const pageView = document.getElementById('page-grid-view');
         const pageGridMsg = document.getElementById('page-grid-msg');
 
-        // Updated conditions for grid view
-        if (toolId === 'delete' || toolId === 'reorder' || toolId === 'split' || toolId === 'pdf-to-img') {
+        if (['delete', 'reorder', 'split', 'pdf-to-img', 'rotate'].includes(toolId)) {
             generalView.classList.add('hidden');
             pageView.classList.remove('hidden');
             
@@ -443,6 +476,8 @@ const app = {
                 pageGridMsg.innerHTML = "Klik halaman yang ingin dihapus. Halaman terpilih akan ditandai merah.";
             } else if (toolId === 'split') {
                 pageGridMsg.innerHTML = "Klik halaman yang ingin dibuang (di-split out). Halaman merah akan dihapus dari hasil.";
+            } else if (toolId === 'rotate') {
+                pageGridMsg.innerHTML = "Klik halaman untuk memilih, lalu gunakan tombol Putar di bawah.";
             } else if (toolId === 'pdf-to-img') {
                 pageGridMsg.innerHTML = "Semua halaman akan dikonversi menjadi gambar JPG.";
             } else {
@@ -479,11 +514,6 @@ const app = {
                     const img = document.createElement('img');
                     img.src = file.thumbnail;
                     img.className = "preview-img";
-                    if (app.currentTool.id === 'rotate') {
-                        const currentRot = document.querySelector('input[name="rotation"]:checked');
-                        if (currentRot) img.style.transform = `rotate(${currentRot.value}deg)`;
-                        else img.style.transform = `rotate(0deg)`;
-                    }
                     previewBox.appendChild(img);
                 } else if (file.name.endsWith('.docx')) {
                      previewBox.innerHTML = '<i class="fa-solid fa-file-word text-4xl text-blue-500"></i>';
@@ -543,11 +573,6 @@ const app = {
                             const img = document.createElement('img');
                             img.src = dataUrl;
                             img.className = "preview-img";
-                             if (app.currentTool.id === 'rotate') {
-                                const currentRot = document.querySelector('input[name="rotation"]:checked');
-                                const deg = currentRot ? currentRot.value : 0;
-                                img.style.transform = `rotate(${deg}deg)`;
-                            }
                             previewBox.appendChild(img);
                         } catch (e) {
                             console.error(e);
@@ -557,47 +582,235 @@ const app = {
                 }
             });
         }
-        
-        // ... (Controls Switch Case) ...
-        app.renderControls();
-    },
-    
-    renderControls: () => {
+
         const controls = document.getElementById('controls-area');
         controls.innerHTML = ''; 
+
         switch(app.currentTool.id) {
-             // ... [Copy previous switch cases here, no changes needed for this part] ...
-             // For brevity, I'll assume the controls render logic remains as is from previous step
-             // You can paste the switch case from the previous `script.js` content here.
-             case 'merge':
-                controls.innerHTML = `<div class="text-center"><h5 class="font-bold text-gray-800 dark:text-white text-lg mb-2">Gabungkan File PDF & Gambar</h5><p class="text-gray-500 dark:text-gray-400 text-sm mb-6 max-w-md mx-auto">Urutan file dalam PDF akhir akan mengikuti urutan kartu di atas. Geser kartu untuk mengubah urutan.</p><div class="flex flex-col sm:flex-row justify-center gap-4 items-center"><div class="px-4 py-2 bg-blue-50 dark:bg-slate-800 text-primary rounded-lg text-sm font-semibold w-full sm:w-auto text-center"><i class="fa-solid fa-layer-group mr-2"></i> Total: ${app.files.length} file</div><button onclick="document.getElementById('fileInput').click()" class="px-5 py-2 border-2 border-dashed border-primary text-primary rounded-xl hover:bg-surface dark:hover:bg-slate-800 font-bold text-sm transition flex items-center justify-center w-full sm:w-auto"><i class="fa-solid fa-plus mr-2"></i> Tambah File</button></div></div>`;
+            case 'merge':
+                controls.innerHTML = `
+                    <div class="text-center">
+                        <h5 class="font-bold text-gray-800 dark:text-white text-lg mb-2">Gabungkan File PDF & Gambar</h5>
+                        <p class="text-gray-500 dark:text-gray-400 text-sm mb-6 max-w-md mx-auto">Urutan file dalam PDF akhir akan mengikuti urutan kartu di atas. Geser kartu untuk mengubah urutan.</p>
+                        
+                        <div class="flex flex-col sm:flex-row justify-center gap-4 items-center">
+                            <div class="px-4 py-2 bg-blue-50 dark:bg-slate-800 text-primary rounded-lg text-sm font-semibold w-full sm:w-auto text-center">
+                                <i class="fa-solid fa-layer-group mr-2"></i> Total: ${app.files.length} file
+                            </div>
+                            <button onclick="document.getElementById('fileInput').click()" class="px-5 py-2 border-2 border-dashed border-primary text-primary rounded-xl hover:bg-surface dark:hover:bg-slate-800 font-bold text-sm transition flex items-center justify-center w-full sm:w-auto">
+                                <i class="fa-solid fa-plus mr-2"></i> Tambah File
+                            </button>
+                        </div>
+                    </div>
+                `;
                 break;
             case 'reorder':
-                 controls.innerHTML = `<div class="text-center"><h5 class="font-bold text-gray-800 dark:text-white text-lg mb-2">Urutan Halaman Baru</h5><p class="text-gray-500 dark:text-gray-400 text-sm mb-2 max-w-md mx-auto">Geser (Drag & Drop) kartu di atas untuk menyusun ulang halaman.</p><div class="text-xs bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-gray-400 px-3 py-1 rounded-lg inline-block">Total Halaman: ${app.pageOrder.length}</div></div>`;
-                 break;
+                controls.innerHTML = `
+                    <div class="text-center">
+                        <h5 class="font-bold text-gray-800 dark:text-white text-lg mb-2">Urutan Halaman Baru</h5>
+                        <p class="text-gray-500 dark:text-gray-400 text-sm mb-2 max-w-md mx-auto">Geser (Drag & Drop) kartu di atas untuk menyusun ulang halaman.</p>
+                        <div class="text-xs bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-gray-400 px-3 py-1 rounded-lg inline-block">
+                            Total Halaman: ${app.pageOrder.length}
+                        </div>
+                    </div>
+                `;
+                break;
             case 'split':
-                controls.innerHTML = `<div class="space-y-6 max-w-lg mx-auto"><div><label class="block text-sm font-bold text-red-600 dark:text-red-400 mb-2">Hapus Halaman via Range</label><input type="text" id="split-ranges" oninput="app.syncDeleteRange(this.value)" placeholder="Contoh: 2, 4-6" class="w-full p-4 border border-red-100 dark:border-red-900/30 bg-red-50/50 dark:bg-red-900/10 rounded-xl focus:ring-4 focus:ring-red-100 dark:focus:ring-red-900/30 focus:border-red-400 outline-none text-red-800 dark:text-red-300 placeholder-red-300 dark:placeholder-red-700/50"></div><div class="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-slate-800 pt-4"><span>Atau klik langsung pada gambar di atas untuk membuangnya.</span><button onclick="app.pagesToDelete.clear(); app.syncDeleteRange(''); document.getElementById('split-ranges').value='';" class="text-primary hover:underline font-medium">Reset Pilihan</button></div></div>`;
+                // Updated Split Controls to be visually similar to Delete
+                controls.innerHTML = `
+                    <div class="space-y-6 max-w-lg mx-auto">
+                        <div>
+                            <label class="block text-sm font-bold text-red-600 dark:text-red-400 mb-2">Hapus Halaman via Range</label>
+                            <input type="text" id="split-ranges" oninput="app.syncDeleteRange(this.value)" placeholder="Contoh: 2, 4-6" class="w-full p-4 border border-red-100 dark:border-red-900/30 bg-red-50/50 dark:bg-red-900/10 rounded-xl focus:ring-4 focus:ring-red-100 dark:focus:ring-red-900/30 focus:border-red-400 outline-none text-red-800 dark:text-red-300 placeholder-red-300 dark:placeholder-red-700/50">
+                        </div>
+                        <div class="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-slate-800 pt-4">
+                            <span>Atau klik langsung pada gambar di atas untuk membuangnya.</span>
+                            <button onclick="app.pagesToDelete.clear(); app.syncDeleteRange(''); document.getElementById('split-ranges').value='';" class="text-primary hover:underline font-medium">Reset Pilihan</button>
+                        </div>
+                    </div>
+                `;
                 break;
             case 'extract':
-                 controls.innerHTML = `<div class="max-w-lg mx-auto"><label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-3">Pilih Halaman</label><input type="text" id="page-ranges" placeholder="Contoh: 1, 3-5, 8" class="w-full p-4 border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none transition text-gray-700 dark:text-gray-200 bg-surface dark:bg-slate-950 placeholder-gray-400 dark:placeholder-gray-600"><p class="text-xs text-gray-400 dark:text-gray-500 mt-3 flex items-start"><i class="fa-solid fa-circle-info mt-0.5 mr-2 text-primary"></i> <span>Gunakan koma untuk halaman tunggal (1, 3) dan tanda hubung untuk rentang (5-10).</span></p></div>`;
-                 break;
+                // Keep extract separate if it implies keeping
+                controls.innerHTML = `
+                    <div class="max-w-lg mx-auto">
+                        <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-3">Pilih Halaman</label>
+                        <input type="text" id="page-ranges" placeholder="Contoh: 1, 3-5, 8" class="w-full p-4 border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none transition text-gray-700 dark:text-gray-200 bg-surface dark:bg-slate-950 placeholder-gray-400 dark:placeholder-gray-600">
+                        <p class="text-xs text-gray-400 dark:text-gray-500 mt-3 flex items-start">
+                            <i class="fa-solid fa-circle-info mt-0.5 mr-2 text-primary"></i> 
+                            <span>Gunakan koma untuk halaman tunggal (1, 3) dan tanda hubung untuk rentang (5-10).</span>
+                        </p>
+                    </div>
+                `;
+                break;
             case 'delete':
-                 controls.innerHTML = `<div class="space-y-6 max-w-lg mx-auto"><div><label class="block text-sm font-bold text-red-600 dark:text-red-400 mb-2">Hapus Halaman via Range</label><input type="text" id="delete-ranges" oninput="app.syncDeleteRange(this.value)" placeholder="Contoh: 2, 4-6" class="w-full p-4 border border-red-100 dark:border-red-900/30 bg-red-50/50 dark:bg-red-900/10 rounded-xl focus:ring-4 focus:ring-red-100 dark:focus:ring-red-900/30 focus:border-red-400 outline-none text-red-800 dark:text-red-300 placeholder-red-300 dark:placeholder-red-700/50"></div><div class="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-slate-800 pt-4"><span>Atau klik langsung pada gambar di atas.</span><button onclick="app.pagesToDelete.clear(); app.syncDeleteRange(''); document.getElementById('delete-ranges').value='';" class="text-primary hover:underline font-medium">Reset Pilihan</button></div></div>`;
-                 break;
+                controls.innerHTML = `
+                    <div class="space-y-6 max-w-lg mx-auto">
+                        <div>
+                            <label class="block text-sm font-bold text-red-600 dark:text-red-400 mb-2">Hapus Halaman via Range</label>
+                            <input type="text" id="delete-ranges" oninput="app.syncDeleteRange(this.value)" placeholder="Contoh: 2, 4-6" class="w-full p-4 border border-red-100 dark:border-red-900/30 bg-red-50/50 dark:bg-red-900/10 rounded-xl focus:ring-4 focus:ring-red-100 dark:focus:ring-red-900/30 focus:border-red-400 outline-none text-red-800 dark:text-red-300 placeholder-red-300 dark:placeholder-red-700/50">
+                        </div>
+                        <div class="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-slate-800 pt-4">
+                            <span>Atau klik langsung pada gambar di atas.</span>
+                            <button onclick="app.pagesToDelete.clear(); app.syncDeleteRange(''); document.getElementById('delete-ranges').value='';" class="text-primary hover:underline font-medium">Reset Pilihan</button>
+                        </div>
+                    </div>
+                `;
+                break;
             case 'rotate':
-                 controls.innerHTML = `<p class="text-sm font-bold text-gray-700 dark:text-gray-300 mb-6 text-center">Pilih Arah Rotasi</p><div class="flex flex-wrap justify-center gap-4 md:gap-8 mb-8"><label class="cursor-pointer group flex flex-col items-center"><div class="w-16 h-16 md:w-20 md:h-20 rounded-2xl border-2 border-gray-100 dark:border-slate-700 flex items-center justify-center mb-3 peer-checked:border-primary peer-checked:bg-primary/5 dark:peer-checked:bg-primary/20 group-hover:border-primary/50 transition relative bg-white dark:bg-slate-800 shadow-sm"><input type="radio" name="rotation" value="90" class="hidden peer" onchange="app.updatePreviewRotation()"><i class="fa-solid fa-rotate-right text-xl md:text-2xl text-gray-400 dark:text-gray-500 peer-checked:text-primary transition"></i></div><span class="text-xs font-bold text-gray-600 dark:text-gray-400 group-hover:text-primary transition">90° Kanan</span></label><label class="cursor-pointer group flex flex-col items-center"><div class="w-16 h-16 md:w-20 md:h-20 rounded-2xl border-2 border-gray-100 dark:border-slate-700 flex items-center justify-center mb-3 peer-checked:border-primary peer-checked:bg-primary/5 dark:peer-checked:bg-primary/20 group-hover:border-primary/50 transition relative bg-white dark:bg-slate-800 shadow-sm"><input type="radio" name="rotation" value="180" class="hidden peer" onchange="app.updatePreviewRotation()"><i class="fa-solid fa-arrows-rotate text-xl md:text-2xl text-gray-400 dark:text-gray-500 peer-checked:text-primary transition"></i></div><span class="text-xs font-bold text-gray-600 dark:text-gray-400 group-hover:text-primary transition">180° Balik</span></label><label class="cursor-pointer group flex flex-col items-center"><div class="w-16 h-16 md:w-20 md:h-20 rounded-2xl border-2 border-gray-100 dark:border-slate-700 flex items-center justify-center mb-3 peer-checked:border-primary peer-checked:bg-primary/5 dark:peer-checked:bg-primary/20 group-hover:border-primary/50 transition relative bg-white dark:bg-slate-800 shadow-sm"><input type="radio" name="rotation" value="270" class="hidden peer" onchange="app.updatePreviewRotation()"><i class="fa-solid fa-rotate-left text-xl md:text-2xl text-gray-400 dark:text-gray-500 peer-checked:text-primary transition"></i></div><span class="text-xs font-bold text-gray-600 dark:text-gray-400 group-hover:text-primary transition">90° Kiri</span></label></div><div class="text-center"><button onclick="app.resetRotation()" class="px-5 py-2 text-xs font-bold text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg hover:bg-white dark:hover:bg-slate-700 hover:text-gray-800 dark:hover:text-gray-200 transition shadow-sm w-full md:w-auto"><i class="fa-solid fa-undo mr-2"></i> Reset Rotasi</button></div>`;
-                 break;
+                controls.innerHTML = `
+                    <div class="flex flex-col gap-4 max-w-xl mx-auto text-center">
+                        <div class="flex flex-wrap justify-center gap-4">
+                            <button onclick="app.rotateSelectedPages(-90)" class="flex flex-col items-center justify-center p-3 rounded-xl bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 shadow-sm hover:border-primary/50 transition w-24">
+                                <i class="fa-solid fa-rotate-left text-2xl text-gray-600 dark:text-gray-300 mb-2"></i>
+                                <span class="text-xs font-bold text-gray-700 dark:text-gray-200">Kiri 90°</span>
+                            </button>
+                            <button onclick="app.rotateSelectedPages(90)" class="flex flex-col items-center justify-center p-3 rounded-xl bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 shadow-sm hover:border-primary/50 transition w-24">
+                                <i class="fa-solid fa-rotate-right text-2xl text-gray-600 dark:text-gray-300 mb-2"></i>
+                                <span class="text-xs font-bold text-gray-700 dark:text-gray-200">Kanan 90°</span>
+                            </button>
+                        </div>
+                        
+                        <div class="flex justify-center gap-4 text-xs font-medium pt-2 border-t border-gray-200 dark:border-slate-700">
+                             <button onclick="app.selectAllPages()" class="text-primary hover:underline">Pilih Semua</button>
+                             <span class="text-gray-300">|</span>
+                             <button onclick="app.resetSelection()" class="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">Reset Pilihan</button>
+                        </div>
+                    </div>
+                `;
+                break;
             case 'img-to-pdf':
-                 controls.innerHTML = `<div class="text-center space-y-6 max-w-2xl mx-auto"><label class="block text-sm font-bold text-gray-700 dark:text-gray-300">Pengaturan Tata Letak</label><div class="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6"><label class="cursor-pointer border border-gray-200 dark:border-slate-700 rounded-2xl p-4 hover:border-primary/50 hover:bg-surface dark:hover:bg-slate-800 has-[:checked]:border-primary has-[:checked]:bg-primary/5 dark:has-[:checked]:bg-primary/20 transition text-left relative group bg-white dark:bg-slate-950 shadow-sm"><input type="radio" name="pdfLayout" value="no-margin" checked class="hidden"><div class="flex items-center mb-2"><div class="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center mr-3 text-primary"><i class="fa-solid fa-expand text-sm"></i></div><span class="font-bold text-sm text-gray-800 dark:text-gray-200">Tanpa Margin</span></div><div class="text-xs text-gray-500 dark:text-gray-400 leading-relaxed pl-11">Full 1 Halaman. Ukuran PDF mengikuti ukuran asli gambar.</div></label><label class="cursor-pointer border border-gray-200 dark:border-slate-700 rounded-2xl p-4 hover:border-primary/50 hover:bg-surface dark:hover:bg-slate-800 has-[:checked]:border-primary has-[:checked]:bg-primary/5 dark:has-[:checked]:bg-primary/20 transition text-left relative group bg-white dark:bg-slate-950 shadow-sm"><input type="radio" name="pdfLayout" value="margin" class="hidden"><div class="flex items-center mb-2"><div class="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center mr-3 text-primary"><i class="fa-solid fa-file-lines text-sm"></i></div><span class="font-bold text-sm text-gray-800 dark:text-gray-200">Dengan Margin</span></div><div class="text-xs text-gray-500 dark:text-gray-400 leading-relaxed pl-11">Fit ke A4. Gambar diletakkan di tengah dengan tepi putih.</div></label></div></div>`;
-                 break;
+                controls.innerHTML = `
+                    <div class="text-center space-y-6 max-w-2xl mx-auto">
+                        <label class="block text-sm font-bold text-gray-700 dark:text-gray-300">Pengaturan Tata Letak</label>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6">
+                            <label class="cursor-pointer border border-gray-200 dark:border-slate-700 rounded-2xl p-4 hover:border-primary/50 hover:bg-surface dark:hover:bg-slate-800 has-[:checked]:border-primary has-[:checked]:bg-primary/5 dark:has-[:checked]:bg-primary/20 transition text-left relative group bg-white dark:bg-slate-950 shadow-sm">
+                                <input type="radio" name="pdfLayout" value="no-margin" checked class="hidden">
+                                <div class="flex items-center mb-2">
+                                    <div class="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center mr-3 text-primary">
+                                        <i class="fa-solid fa-expand text-sm"></i>
+                                    </div>
+                                    <span class="font-bold text-sm text-gray-800 dark:text-gray-200">Tanpa Margin</span>
+                                </div>
+                                <div class="text-xs text-gray-500 dark:text-gray-400 leading-relaxed pl-11">Full 1 Halaman. Ukuran PDF mengikuti ukuran asli gambar.</div>
+                            </label>
+                            
+                            <label class="cursor-pointer border border-gray-200 dark:border-slate-700 rounded-2xl p-4 hover:border-primary/50 hover:bg-surface dark:hover:bg-slate-800 has-[:checked]:border-primary has-[:checked]:bg-primary/5 dark:has-[:checked]:bg-primary/20 transition text-left relative group bg-white dark:bg-slate-950 shadow-sm">
+                                <input type="radio" name="pdfLayout" value="margin" class="hidden">
+                                <div class="flex items-center mb-2">
+                                    <div class="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center mr-3 text-primary">
+                                        <i class="fa-solid fa-file-lines text-sm"></i>
+                                    </div>
+                                    <span class="font-bold text-sm text-gray-800 dark:text-gray-200">Dengan Margin</span>
+                                </div>
+                                <div class="text-xs text-gray-500 dark:text-gray-400 leading-relaxed pl-11">Fit ke A4. Gambar diletakkan di tengah dengan tepi putih.</div>
+                            </label>
+                        </div>
+                    </div>
+                `;
+                break;
             case 'number':
-                 controls.innerHTML = `<div class="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-8 max-w-lg mx-auto"><div><label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-3">Posisi Nomor</label><div class="relative"><select id="num-pos" class="w-full border border-gray-200 dark:border-slate-700 rounded-xl p-3 bg-surface dark:bg-slate-950 dark:text-gray-200 appearance-none focus:ring-2 focus:ring-primary/20 outline-none text-sm font-medium"><option value="bottom-center">Bawah Tengah</option><option value="bottom-right">Bawah Kanan</option><option value="top-right">Atas Kanan</option><option value="top-left">Atas Kiri</option></select><i class="fa-solid fa-chevron-down absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 text-xs pointer-events-none"></i></div></div><div><label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-3">Ukuran Font</label><div class="relative"><select id="num-size" class="w-full border border-gray-200 dark:border-slate-700 rounded-xl p-3 bg-surface dark:bg-slate-950 dark:text-gray-200 appearance-none focus:ring-2 focus:ring-primary/20 outline-none text-sm font-medium"><option value="9">Kecil (9pt)</option><option value="12" selected>Normal (12pt)</option><option value="16">Besar (16pt)</option></select><i class="fa-solid fa-chevron-down absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 text-xs pointer-events-none"></i></div></div></div>`;
-                 break;
+                controls.innerHTML = `
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-8 max-w-lg mx-auto">
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-3">Posisi Nomor</label>
+                            <div class="relative">
+                                <select id="num-pos" class="w-full border border-gray-200 dark:border-slate-700 rounded-xl p-3 bg-surface dark:bg-slate-950 dark:text-gray-200 appearance-none focus:ring-2 focus:ring-primary/20 outline-none text-sm font-medium">
+                                    <option value="bottom-center">Bawah Tengah</option>
+                                    <option value="bottom-right">Bawah Kanan</option>
+                                    <option value="top-right">Atas Kanan</option>
+                                    <option value="top-left">Atas Kiri</option>
+                                </select>
+                                <i class="fa-solid fa-chevron-down absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 text-xs pointer-events-none"></i>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-3">Ukuran Font</label>
+                            <div class="relative">
+                                <select id="num-size" class="w-full border border-gray-200 dark:border-slate-700 rounded-xl p-3 bg-surface dark:bg-slate-950 dark:text-gray-200 appearance-none focus:ring-2 focus:ring-primary/20 outline-none text-sm font-medium">
+                                    <option value="9">Kecil (9pt)</option>
+                                    <option value="12" selected>Normal (12pt)</option>
+                                    <option value="16">Besar (16pt)</option>
+                                </select>
+                                <i class="fa-solid fa-chevron-down absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 text-xs pointer-events-none"></i>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                break;
             case 'compress':
-                controls.innerHTML = `<div class="space-y-6 text-left max-w-lg mx-auto"><div><label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-4">Mode Kompresi</label><div class="grid grid-cols-1 sm:grid-cols-2 gap-4"><label class="cursor-pointer border border-gray-200 dark:border-slate-700 rounded-xl p-4 hover:border-primary/30 hover:bg-surface dark:hover:bg-slate-800 has-[:checked]:border-primary has-[:checked]:bg-primary/5 dark:has-[:checked]:bg-primary/20 transition bg-white dark:bg-slate-950 shadow-sm"><input type="radio" name="compressMode" value="basic" checked class="hidden" onchange="app.toggleCompressOptions()"><div class="font-bold text-sm text-gray-800 dark:text-gray-200 mb-1">Standar</div><div class="text-xs text-gray-500 dark:text-gray-400">Hapus metadata, pertahankan teks (Cepat).</div></label><label class="cursor-pointer border border-gray-200 dark:border-slate-700 rounded-xl p-4 hover:border-primary/30 hover:bg-surface dark:hover:bg-slate-800 has-[:checked]:border-primary has-[:checked]:bg-primary/5 dark:has-[:checked]:bg-primary/20 transition bg-white dark:bg-slate-950 shadow-sm"><input type="radio" name="compressMode" value="extreme" class="hidden" onchange="app.toggleCompressOptions()"><div class="font-bold text-sm text-gray-800 dark:text-gray-200 mb-1">Ekstrem</div><div class="text-xs text-gray-500 dark:text-gray-400">Ubah jadi gambar, atur kualitas (Lambat).</div></label></div></div><div id="compress-options" class="hidden space-y-6 border-t border-gray-100 dark:border-slate-800 pt-6 animate-fade-in"><div><label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-3">Kualitas Gambar (Estimasi Ukuran)</label><div class="flex items-center gap-4"><input type="range" id="comp-quality" min="0.1" max="1.0" step="0.1" value="0.7" class="w-full accent-primary h-2 bg-gray-100 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer" oninput="document.getElementById('qual-val').innerText = Math.round(this.value * 100) + '%'"><span id="qual-val" class="font-bold text-primary w-12 text-right bg-primary/10 rounded px-2 py-1 text-xs">70%</span></div><div class="flex justify-between text-[10px] text-gray-400 dark:text-gray-500 mt-2 font-medium uppercase tracking-wide"><span>Ukuran Kecil</span><span>Kualitas Tinggi</span></div></div><div><label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-3">Resolusi (PPI)</label><div class="relative"><select id="comp-ppi" class="w-full border border-gray-200 dark:border-slate-700 rounded-xl p-3 bg-surface dark:bg-slate-950 dark:text-gray-200 appearance-none focus:ring-2 focus:ring-primary/20 outline-none text-sm font-medium"><option value="72">72 PPI (Layar / Web - Kecil)</option><option value="96">96 PPI (Standard)</option><option value="144" selected>144 PPI (Ebook / Jelas)</option><option value="300">300 PPI (Cetak - Besar)</option></select><i class="fa-solid fa-chevron-down absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 text-xs pointer-events-none"></i></div></div><div class="bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300 p-4 rounded-xl text-xs border border-amber-100 dark:border-amber-800/30 flex items-start"><i class="fa-solid fa-triangle-exclamation mr-3 text-sm mt-0.5"></i> <span><b>Perhatian:</b> Mode Ekstrem akan mengubah halaman menjadi gambar (rasterize). Teks dalam PDF tidak akan bisa diblok/copy lagi.</span></div></div></div>`;
+                controls.innerHTML = `
+                    <div class="space-y-6 text-left max-w-lg mx-auto">
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-4">Mode Kompresi</label>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <label class="cursor-pointer border border-gray-200 dark:border-slate-700 rounded-xl p-4 hover:border-primary/30 hover:bg-surface dark:hover:bg-slate-800 has-[:checked]:border-primary has-[:checked]:bg-primary/5 dark:has-[:checked]:bg-primary/20 transition bg-white dark:bg-slate-950 shadow-sm">
+                                    <input type="radio" name="compressMode" value="basic" checked class="hidden" onchange="app.toggleCompressOptions()">
+                                    <div class="font-bold text-sm text-gray-800 dark:text-gray-200 mb-1">Standar</div>
+                                    <div class="text-xs text-gray-500 dark:text-gray-400">Hapus metadata, pertahankan teks (Cepat).</div>
+                                </label>
+                                <label class="cursor-pointer border border-gray-200 dark:border-slate-700 rounded-xl p-4 hover:border-primary/30 hover:bg-surface dark:hover:bg-slate-800 has-[:checked]:border-primary has-[:checked]:bg-primary/5 dark:has-[:checked]:bg-primary/20 transition bg-white dark:bg-slate-950 shadow-sm">
+                                    <input type="radio" name="compressMode" value="extreme" class="hidden" onchange="app.toggleCompressOptions()">
+                                    <div class="font-bold text-sm text-gray-800 dark:text-gray-200 mb-1">Ekstrem</div>
+                                    <div class="text-xs text-gray-500 dark:text-gray-400">Ubah jadi gambar, atur kualitas (Lambat).</div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div id="compress-options" class="hidden space-y-6 border-t border-gray-100 dark:border-slate-800 pt-6 animate-fade-in">
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-3">Kualitas Gambar (Estimasi Ukuran)</label>
+                                <div class="flex items-center gap-4">
+                                    <input type="range" id="comp-quality" min="0.1" max="1.0" step="0.1" value="0.7" class="w-full accent-primary h-2 bg-gray-100 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer" oninput="document.getElementById('qual-val').innerText = Math.round(this.value * 100) + '%'">
+                                    <span id="qual-val" class="font-bold text-primary w-12 text-right bg-primary/10 rounded px-2 py-1 text-xs">70%</span>
+                                </div>
+                                <div class="flex justify-between text-[10px] text-gray-400 dark:text-gray-500 mt-2 font-medium uppercase tracking-wide">
+                                    <span>Ukuran Kecil</span>
+                                    <span>Kualitas Tinggi</span>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-3">Resolusi (PPI)</label>
+                                <div class="relative">
+                                    <select id="comp-ppi" class="w-full border border-gray-200 dark:border-slate-700 rounded-xl p-3 bg-surface dark:bg-slate-950 dark:text-gray-200 appearance-none focus:ring-2 focus:ring-primary/20 outline-none text-sm font-medium">
+                                        <option value="72">72 PPI (Layar / Web - Kecil)</option>
+                                        <option value="96">96 PPI (Standard)</option>
+                                        <option value="144" selected>144 PPI (Ebook / Jelas)</option>
+                                        <option value="300">300 PPI (Cetak - Besar)</option>
+                                    </select>
+                                    <i class="fa-solid fa-chevron-down absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 text-xs pointer-events-none"></i>
+                                </div>
+                            </div>
+                            
+                            <div class="bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300 p-4 rounded-xl text-xs border border-amber-100 dark:border-amber-800/30 flex items-start">
+                                <i class="fa-solid fa-triangle-exclamation mr-3 text-sm mt-0.5"></i> 
+                                <span><b>Perhatian:</b> Mode Ekstrem akan mengubah halaman menjadi gambar (rasterize). Teks dalam PDF tidak akan bisa diblok/copy lagi.</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
                 break;
             case 'compress-img':
-                controls.innerHTML = `<div class="space-y-6 text-left max-w-lg mx-auto"><div><label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-3">Kualitas Gambar (%)</label><div class="flex items-center gap-4"><input type="range" id="img-quality" min="10" max="100" step="5" value="70" class="w-full accent-primary h-2 bg-gray-100 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer" oninput="document.getElementById('img-qual-val').innerText = this.value + '%'"><span id="img-qual-val" class="font-bold text-primary w-14 text-right bg-primary/10 rounded px-2 py-1 text-xs">70%</span></div><div class="flex justify-between text-[10px] text-gray-400 dark:text-gray-500 mt-2 font-medium uppercase tracking-wide"><span>Rendah (Kecil)</span><span>Tinggi (Besar)</span></div></div><div class="bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-300 p-4 rounded-xl text-xs border border-blue-100 dark:border-blue-800/30 flex items-start"><i class="fa-solid fa-info-circle mr-3 text-sm mt-0.5"></i> <span>Output akan berformat JPEG.</span></div></div>`;
+                controls.innerHTML = `
+                    <div class="space-y-6 text-left max-w-lg mx-auto">
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-3">Kualitas Gambar (%)</label>
+                            <div class="flex items-center gap-4">
+                                <input type="range" id="img-quality" min="10" max="100" step="5" value="70" class="w-full accent-primary h-2 bg-gray-100 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer" oninput="document.getElementById('img-qual-val').innerText = this.value + '%'">
+                                <span id="img-qual-val" class="font-bold text-primary w-14 text-right bg-primary/10 rounded px-2 py-1 text-xs">70%</span>
+                            </div>
+                            <div class="flex justify-between text-[10px] text-gray-400 dark:text-gray-500 mt-2 font-medium uppercase tracking-wide">
+                                <span>Rendah (Kecil)</span>
+                                <span>Tinggi (Besar)</span>
+                            </div>
+                        </div>
+                        <div class="bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-300 p-4 rounded-xl text-xs border border-blue-100 dark:border-blue-800/30 flex items-start">
+                            <i class="fa-solid fa-info-circle mr-3 text-sm mt-0.5"></i> 
+                            <span>Output akan berformat JPEG.</span>
+                        </div>
+                    </div>
+                `;
                 break;
         }
     },
@@ -715,17 +928,20 @@ const app = {
                 resultBytes = await newPdf.save();
 
             } else if (toolId === 'rotate') {
-                const rotInput = document.querySelector('input[name="rotation"]:checked');
-                if (!rotInput) {
-                    alert("Silakan pilih arah rotasi terlebih dahulu.");
-                    app.resetButtonState();
-                    return;
+                if (app.pageRotations.every(r => r === 0)) {
+                     // Check if any page actually needs rotation
+                     // If none, maybe user didn't select anything. But let's proceed anyway if they want to save unchanged?
+                     // Or alert? Let's check selected pages just in case.
                 }
-                const deg = parseInt(rotInput.value);
+
+                // Apply rotations from the array
                 const pages = pdfDoc.getPages();
-                pages.forEach(page => {
-                    const current = page.getRotation().angle;
-                    page.setRotation(degrees(current + deg));
+                pages.forEach((page, idx) => {
+                    const rot = app.pageRotations[idx] || 0;
+                    if(rot !== 0) {
+                        const current = page.getRotation().angle;
+                        page.setRotation(degrees(current + rot));
+                    }
                 });
                 resultBytes = await pdfDoc.save();
 
